@@ -48,7 +48,7 @@ main {
 }
 .topbar__brand {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 13px;
@@ -61,6 +61,12 @@ main {
   background: var(--gold);
   box-shadow: 0 0 12px var(--gold);
   animation: pulse 2.4s ease-in-out infinite;
+  align-self: center;
+}
+.topbar__brand .topbar__logo {
+  height: 28px;
+  width: auto;
+  display: block;
 }
 @keyframes pulse {
   0%,100% { opacity: 0.85; transform: scale(1); }
