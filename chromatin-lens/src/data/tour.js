@@ -9,12 +9,12 @@ const midpoint = (id) => {
   return (s.zoomMin + s.zoomMax) / 2;
 };
 
-// Slightly past each scale's start so `grow === 1` and the scene renders at
-// its natural size. Useful for tour steps that want the entire scene (e.g.
-// the full helix during replication) to fit the viewport.
+// Past each scale's fade-in band so `grow === 1` AND neighbouring scenes
+// are fully faded out (no bleed). Matches ScaleController's SCALE_FADE_WIDTH
+// (0.02) plus a small buffer.
 const scaleStart = (id) => {
   const s = SCALES.find((x) => x.id === id);
-  return s.zoomMin + 0.003;
+  return s.zoomMin + 0.022;
 };
 
 // Recompute of LoopScene's parametric teardrop curve (kept in sync with

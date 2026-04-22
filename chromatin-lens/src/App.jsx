@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import ScaleController, { getActiveScale } from './scenes/ScaleController';
+import ScaleController, { getActiveScale, SCALE_FADE_WIDTH } from './scenes/ScaleController';
 import Sidebar from './components/Sidebar';
 import ScaleHint from './components/ScaleHint';
 import TimelineControl from './components/TimelineControl';
@@ -244,25 +244,32 @@ export default function App() {
       // Snapshot the user's lock state on first entry — use a sentinel so we
       // can distinguish "no prior lock" from "haven't snapshotted yet".
       if (preTourLockRef.current === undefined || preTourLockRef.current === null) {
-        // store explicit null-vs-string via a one-shot boxed value
         preTourLockRef.current = { prev: lockedScaleId };
       }
       const scale = getActiveScale(zoom);
       if (lockedScaleId !== scale.id) setLockedScaleId(scale.id);
+      // Also push zoom past the fade band so no adjacent scene bleeds in.
+      const pad = SCALE_FADE_WIDTH + 0.002;
+      const lo = scale.zoomMin + pad;
+      const hi = scale.zoomMax - pad;
+      if (zoom < lo || zoom > hi) {
+        setZoom(Math.max(lo, Math.min(hi, zoom)));
+      }
     } else if (preTourLockRef.current && typeof preTourLockRef.current === 'object') {
-      // Restore previous lock (string id or null)
       setLockedScaleId(preTourLockRef.current.prev ?? null);
       preTourLockRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tourActive, zoom]);
 
-  // Clamp zoom to the locked scale, or [0,1] otherwise.
+  // Clamp zoom to the locked scale, or [0,1] otherwise. When locked, pad
+  // the clamp by the full fade-out width so adjacent scenes can't bleed in
+  // at the edges — the locked zone renders cleanly and exclusively.
   const clampZoom = (next) => {
     const lockedId = lockedRef.current;
     const lockedScale = lockedId ? SCALES.find(s => s.id === lockedId) : null;
     if (lockedScale) {
-      const pad = 0.002;
+      const pad = SCALE_FADE_WIDTH + 0.002;
       return Math.max(lockedScale.zoomMin + pad, Math.min(lockedScale.zoomMax - pad, next));
     }
     return Math.max(0, Math.min(1, next));

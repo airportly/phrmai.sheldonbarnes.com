@@ -21,9 +21,13 @@ const SCENE_COMPONENTS = {
   atomic: AtomicScene,
 };
 
+// Exported so App.jsx can use the same fade band when clamping locked zoom
+// (otherwise the locked scale's edges would still blend with the neighbors).
+export const SCALE_FADE_WIDTH = 0.02;
+
 function computeOpacity(zoom, scale) {
   const { zoomMin, zoomMax } = scale;
-  const fadeWidth = 0.02;
+  const fadeWidth = SCALE_FADE_WIDTH;
   if (zoom < zoomMin - fadeWidth) return 0;
   if (zoom > zoomMax + fadeWidth) return 0;
   if (zoom < zoomMin) return (zoom - (zoomMin - fadeWidth)) / fadeWidth;
@@ -32,7 +36,7 @@ function computeOpacity(zoom, scale) {
 }
 
 function computeGrow(zoom, scale) {
-  const fadeWidth = 0.02;
+  const fadeWidth = SCALE_FADE_WIDTH;
   const { zoomMin, zoomMax, maxGrow } = scale;
   if (zoom < zoomMin) {
     const t = Math.max(0, (zoom - (zoomMin - fadeWidth)) / fadeWidth);
