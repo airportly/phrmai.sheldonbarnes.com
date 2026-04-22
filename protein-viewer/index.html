@@ -1,0 +1,1900 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Boltz-2 Structure Viewer</title>
+
+<!-- Mol* viewer (pinned — `latest` can break on API changes). -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/molstar@4.9.0/build/viewer/molstar.css" />
+<script src="https://cdn.jsdelivr.net/npm/molstar@4.9.0/build/viewer/molstar.js"></script>
+
+<style>
+  :root {
+    --bg: #0b0b0c;
+    --panel: #141416;
+    --panel-2: #1c1c20;
+    --border: #2a2a30;
+    --text: #e8e8ea;
+    --muted: #8a8a93;
+    --accent: #76b900; /* NVIDIA-ish green */
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  #sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #sidebar h1 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  #file-info {
+    font-size: 12px;
+    color: var(--muted);
+    word-break: break-all;
+  }
+
+  #structure-picker, #protein-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #structure-picker { display: none; }
+
+  #structure-picker label, #protein-picker label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+
+  #structure-picker select, #protein-picker select {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font: inherit;
+  }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .metric {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .metric .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+
+  .metric .value {
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+    Emphasis reasoning: confidence_score is Boltz's headline aggregate metric,
+    and complex_plddt_score is the per-residue confidence most biologists read
+    first — spanning those two across the full width makes them scan-first.
+  */
+  .metric.wide {
+    grid-column: span 2;
+  }
+
+  #status {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: pre-wrap;
+  }
+
+  #status.error {
+    border-color: #5a2222;
+    color: #f5a0a0;
+  }
+
+  #viewer-wrap {
+    position: relative;
+    background: #000;
+  }
+
+  #viewer {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Mol* sets its own backgrounds, but make sure the canvas area is black
+     before the viewer renders. */
+  .msp-plugin .msp-viewport {
+    background: #000 !important;
+  }
+
+  /* Floating assistant (replaces sidebar voice control) */
+  #assistant {
+    position: absolute;
+    right: 24px;
+    bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    z-index: 10;
+  }
+
+  #assistant-btn {
+    width: 72px;
+    height: 72px;
+    border: none;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    transition: transform 150ms ease, filter 150ms ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Soft glow against the black viewport so the logo still pops. */
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
+  }
+  #assistant-btn img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    pointer-events: none;
+  }
+  #assistant-btn:hover:not(:disabled) { transform: scale(1.05); }
+  #assistant-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #assistant-btn.listening {
+    animation: assistant-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes assistant-pulse {
+    0%, 100% {
+      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6))
+              drop-shadow(0 0 4px rgba(118, 185, 0, 0.6));
+    }
+    50% {
+      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6))
+              drop-shadow(0 0 14px rgba(118, 185, 0, 0.9));
+    }
+  }
+
+  #assistant-panel {
+    background: rgba(10, 10, 12, 0.92);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 12px;
+    max-width: 340px;
+    min-width: 220px;
+    font-size: 13px;
+    line-height: 1.45;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 200ms, transform 200ms;
+    pointer-events: none;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  }
+  #assistant-panel.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  #voice-transcript {
+    min-height: 18px;
+    font-size: 13px;
+    color: var(--muted);
+    font-style: italic;
+  }
+  #voice-result {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  #voice-result.miss { color: #f5a0a0; }
+
+  /* Voice command cheatsheet in the sidebar */
+  #voice-hints {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #voice-hints h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  #voice-hints .hints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  #voice-hints code {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 3px 6px;
+    font: 11px/1 ui-monospace, Menlo, Consolas, monospace;
+    color: var(--text);
+  }
+
+  /* Guided tour */
+  #tour {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #tour-btn {
+    background: var(--accent);
+    color: #0b0b0c;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #tour-btn:hover { filter: brightness(1.1); }
+  #tour-btn.playing { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+
+  #walk-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .walk-btn {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .walk-btn:hover:not(:disabled) { border-color: #444; }
+  .walk-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .walk-btn .hint {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 4px;
+  }
+
+  /* Residue chips */
+  #residues {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  #residues > h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .chain-group h3 {
+    margin: 0 0 6px 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .chain-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .res-chip {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 3px 6px;
+    font: 11px/1 ui-monospace, Menlo, Consolas, monospace;
+    cursor: pointer;
+  }
+  .res-chip:hover { border-color: var(--accent); }
+  .res-chip.active { background: var(--accent); color: #0b0b0c; border-color: var(--accent); }
+
+  .chain-group.active h3 { color: var(--accent); }
+  .chain-group.active { position: relative; }
+  .chain-group.active::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  /* Caption overlay on the viewer itself — reads better as subtitles. */
+  #caption {
+    position: absolute;
+    left: 50%;
+    bottom: 32px;
+    transform: translateX(-50%);
+    max-width: min(72ch, calc(100% - 64px));
+    background: rgba(0, 0, 0, 0.72);
+    color: #f3f3f5;
+    padding: 14px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    line-height: 1.45;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  #caption.visible { opacity: 1; }
+</style>
+</head>
+
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <h1>Boltz-2 Prediction</h1>
+
+    <div id="protein-picker">
+      <label for="protein-select">Protein</label>
+      <select id="protein-select"></select>
+    </div>
+
+    <div id="file-info">Loading…</div>
+
+    <div id="structure-picker">
+      <label for="structure-select">Structure</label>
+      <select id="structure-select"></select>
+    </div>
+
+    <div class="metrics" id="metrics"></div>
+
+    <div id="status">Initializing viewer…</div>
+
+    <div id="tour">
+      <button id="tour-btn" disabled>Start guided tour</button>
+      <button id="narrate-toggle" class="walk-btn">Narration: on</button>
+      <div id="walk-btns"></div>
+    </div>
+
+    <div id="voice-hints">
+      <h2>Voice commands</h2>
+      <div class="hints">
+        <code>what can I do</code>
+        <code>guided tour</code>
+        <code>click DG3</code>
+        <code>focus glutamate 4</code>
+        <code>chain A</code>
+        <code>walk through chain A</code>
+        <code>stop tour</code>
+        <code>stop listening</code>
+        <code>rotate right</code>
+        <code>rotate up</code>
+        <code>zoom in</code>
+        <code>zoom out</code>
+        <code>spin</code>
+        <code>stop</code>
+        <code>deselect</code>
+        <code>reset</code>
+      </div>
+    </div>
+
+    <div id="residues"></div>
+  </aside>
+
+  <div id="viewer-wrap">
+    <div id="viewer"></div>
+    <div id="caption"></div>
+
+    <div id="assistant">
+      <div id="assistant-panel">
+        <div id="voice-transcript">Click the assistant to speak…</div>
+        <div id="voice-result"></div>
+      </div>
+      <button id="assistant-btn" disabled title="Ask the assistant — click to speak">
+        <img src="ackee-logo.png" alt="Assistant" />
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // --- Config -------------------------------------------------------------
+  // Files the sidebar dropdown lets you switch between. Add new entries as
+  // you save more BioNeMo JSON outputs into this folder.
+  const PROTEIN_CATALOG = [
+    { file: 'protein_1.json', name: 'Example 1 — bHLH / E-box DNA' },
+    { file: 'protein_2.json', name: 'Example 2 — λ Cro + operator DNA' },
+  ];
+
+  // Which scores to show and how to format them.
+  // complex_pde_score is omitted per the prompt (only 4 scores requested),
+  // but easy to re-add here if wanted.
+  const SCORE_FIELDS = [
+    { key: 'confidence_score',     label: 'Confidence',    fmt: v => v.toFixed(3), wide: true  },
+    { key: 'complex_plddt_score',  label: 'Complex pLDDT', fmt: v => v.toFixed(2), wide: true  },
+    { key: 'ptm_score',            label: 'pTM',           fmt: v => v.toFixed(3), wide: false },
+    { key: 'iptm_score',           label: 'ipTM',          fmt: v => v.toFixed(3), wide: false },
+  ];
+
+  // --- State --------------------------------------------------------------
+  let viewer = null;
+  let structures = [];
+  let currentIndex = 0;
+
+  // --- UI helpers ---------------------------------------------------------
+  const $ = id => document.getElementById(id);
+
+  function setStatus(msg, isError = false) {
+    const el = $('status');
+    el.textContent = msg;
+    el.classList.toggle('error', isError);
+    el.style.display = '';
+  }
+
+  function clearStatus() {
+    $('status').style.display = 'none';
+  }
+
+  function renderMetrics(scores) {
+    const root = $('metrics');
+    root.innerHTML = '';
+    for (const f of SCORE_FIELDS) {
+      const v = scores[f.key];
+      const card = document.createElement('div');
+      card.className = 'metric' + (f.wide ? ' wide' : '');
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = f.label;
+      const value = document.createElement('div');
+      value.className = 'value';
+      value.textContent = (typeof v === 'number' && !Number.isNaN(v)) ? f.fmt(v) : '—';
+      card.appendChild(label);
+      card.appendChild(value);
+      root.appendChild(card);
+    }
+  }
+
+  function renderPicker() {
+    const picker = $('structure-picker');
+    if (structures.length <= 1) {
+      picker.style.display = 'none';
+      return;
+    }
+    picker.style.display = 'flex';
+    const sel = $('structure-select');
+    sel.innerHTML = '';
+    structures.forEach((s, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = s.name || `Structure ${i + 1}`;
+      sel.appendChild(opt);
+    });
+    sel.value = String(currentIndex);
+    sel.onchange = () => loadStructure(parseInt(sel.value, 10));
+  }
+
+  // --- Mol* wiring --------------------------------------------------------
+  async function initViewer() {
+    viewer = await molstar.Viewer.create('viewer', {
+      layoutIsExpanded: false,
+      layoutShowControls: false,
+      layoutShowRemoteState: false,
+      layoutShowSequence: false,
+      layoutShowLog: false,
+      layoutShowLeftPanel: false,
+      viewportShowExpand: false,
+      viewportShowControls: false,
+      viewportShowSettings: false,
+      viewportShowSelectionMode: false,
+      viewportShowAnimation: false,
+      viewportShowTrajectoryControls: false,
+      pdbProvider: 'rcsb',
+      emdbProvider: 'rcsb',
+    });
+
+    // Black canvas to match the BioNeMo viewer. Mol*'s default lighting/AO
+    // is already good; leaving postprocessing at defaults avoids pinning us
+    // to any specific version's param shape.
+    viewer.plugin.canvas3d?.setProps({
+      renderer: { backgroundColor: 0x000000 },
+    });
+  }
+
+  async function loadStructure(index) {
+    currentIndex = index;
+    const s = structures[index];
+    if (!s) return;
+
+    renderMetrics(s);
+
+    // Fresh slate each load — simplest way to avoid duplicate structures.
+    await viewer.plugin.clear();
+
+    // `residue-index` gives the rainbow N→C ramp we want on cartoons.
+    // Nucleic acids fall through to Mol*'s default representation/coloring.
+    await viewer.loadStructureFromData(s.structure, 'mmcif', false, {
+      representationParams: {
+        theme: { globalName: 'residue-index' },
+      },
+    });
+  }
+
+  // --- Parsing ------------------------------------------------------------
+  function extractStructures(json) {
+    const outputs = json?.outputs;
+    if (!Array.isArray(outputs) || !outputs.length) {
+      throw new Error('JSON has no "outputs" array.');
+    }
+    // Flatten across outputs so multi-output files still work.
+    const all = [];
+    outputs.forEach((out, oi) => {
+      const list = out?.structures_with_scores;
+      if (!Array.isArray(list)) return;
+      list.forEach((s, si) => {
+        if (!s?.structure) return;
+        all.push({
+          ...s,
+          name: s.name || `output_${oi + 1}_sample_${si + 1}`,
+        });
+      });
+    });
+    if (!all.length) throw new Error('No structures_with_scores[].structure found.');
+    return all;
+  }
+
+  // --- Boot ---------------------------------------------------------------
+  async function loadProteinFile(entry) {
+    // Stop any playing tour — the structure is about to change underneath it.
+    if (typeof stopTour === 'function') stopTour();
+    _structureCenter = null; // drop cached center from the previous structure
+    setStatus(`Loading ${entry.file}…`);
+    $('status').style.display = '';
+
+    let json;
+    try {
+      const res = await fetch(entry.file);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      json = await res.json();
+    } catch (e) {
+      console.error(e);
+      setStatus(
+        `Could not load ${entry.file}.\n\n` +
+        `If this file doesn't exist yet, run ${entry.name} through BioNeMo ` +
+        `and save the downloaded JSON here as "${entry.file}".\n\n` +
+        `(If you opened this HTML by double-clicking, browsers block fetch() over file://. ` +
+        `Start a local server with:  python3 -m http.server 8000)`,
+        true
+      );
+      return;
+    }
+
+    try {
+      structures = extractStructures(json);
+    } catch (e) {
+      console.error(e);
+      setStatus(`Parse error: ${e.message}`, true);
+      return;
+    }
+
+    currentIndex = 0;
+    $('file-info').textContent =
+      `${entry.file} — ${structures.length} structure${structures.length === 1 ? '' : 's'}`;
+    renderPicker();
+
+    try {
+      await loadStructure(0);
+      clearStatus();
+    } catch (e) {
+      console.error(e);
+      setStatus(`Failed to load structure: ${e.message}`, true);
+      return;
+    }
+
+    // Walk-chain buttons + residue chips depend on the loaded structure.
+    if (typeof renderWalkButtons === 'function') renderWalkButtons();
+    if (typeof renderResidueList === 'function') renderResidueList();
+  }
+
+  function initProteinPicker() {
+    const sel = $('protein-select');
+    sel.innerHTML = '';
+    PROTEIN_CATALOG.forEach((entry, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = entry.name;
+      sel.appendChild(opt);
+    });
+    sel.value = '0';
+    sel.onchange = () => {
+      const entry = PROTEIN_CATALOG[parseInt(sel.value, 10)];
+      if (entry) loadProteinFile(entry);
+    };
+  }
+
+  async function boot() {
+    try {
+      await initViewer();
+    } catch (e) {
+      console.error(e);
+      setStatus(`Failed to initialize Mol*: ${e.message}`, true);
+      return;
+    }
+
+    initProteinPicker();
+    await loadProteinFile(PROTEIN_CATALOG[0]);
+
+    initVoice();
+    initTour();
+  }
+
+  // --- Mol* actions -------------------------------------------------------
+  // All camera moves go through plugin.canvas3d.camera so we don't depend
+  // on internal utilities that may not be on the viewer CDN build.
+
+  function getStructure() {
+    const ref = viewer.plugin.managers.structure.hierarchy.current.structures[0];
+    return ref?.cell.obj?.data || null;
+  }
+
+  // One walk over the structure with a caller-supplied predicate.
+  // Returns world-space coords (for framing) + per-unit indices (for Loci).
+  function findMatching(predicate) {
+    const structure = getStructure();
+    if (!structure) return null;
+
+    const pts = [];
+    const lociElements = [];
+
+    for (const unit of structure.units) {
+      const { elements } = unit;
+      const h = unit.model.atomicHierarchy;
+      const conf = unit.model.atomicConformation;
+      const hits = [];
+
+      for (let i = 0, il = elements.length; i < il; i++) {
+        const eI = elements[i];
+        if (!predicate(h, eI)) continue;
+        pts.push([conf.x[eI], conf.y[eI], conf.z[eI]]);
+        hits.push(i);
+      }
+
+      if (hits.length) {
+        lociElements.push({ unit, indices: new Int32Array(hits) });
+      }
+    }
+
+    if (!pts.length) return null;
+    return {
+      points: pts,
+      loci: { kind: 'element-loci', structure, elements: lociElements },
+    };
+  }
+
+  // Predicate builders — each returns (h, eI) => boolean.
+  const P = {
+    residue: (compId, seqNum) => (h, eI) =>
+      h.atoms?.label_comp_id?.value(eI) === compId &&
+      h.residues?.auth_seq_id?.value(h.residueAtomSegments.index[eI]) === seqNum,
+    compId: (compId) => (h, eI) =>
+      h.atoms?.label_comp_id?.value(eI) === compId,
+    chain: (chainId) => (h, eI) => {
+      const cI = h.chainAtomSegments?.index?.[eI];
+      return cI != null && h.chains?.auth_asym_id?.value(cI) === chainId;
+    },
+  };
+
+  const findResidue = (compId, seqNum) => findMatching(P.residue(compId, seqNum));
+
+  // Tightness of "focus" framing. Lower = closer zoom. The sphere radius
+  // fed to camera.focus() drives how wide the camera frames the target;
+  // Mol* then picks a distance that fits that radius in the viewport.
+  const FOCUS_PADDING = 1.0;   // Å added beyond the residue's extent.
+  const FOCUS_MIN_RADIUS = 2;  // Å — don't let single-atom selections blow up.
+
+  // Cached structure center — computed once per structure load so the
+  // walk-through doesn't re-average thousands of atoms per step.
+  let _structureCenter = null;
+  function getStructureCenter() {
+    if (_structureCenter) return _structureCenter;
+    const structure = getStructure();
+    if (!structure) return null;
+
+    // Mol*'s boundary is the authoritative source; fall back to averaging
+    // atom positions if it isn't on this build's global.
+    const s = structure.boundary?.sphere;
+    if (s?.center) {
+      _structureCenter = [s.center[0], s.center[1], s.center[2]];
+      return _structureCenter;
+    }
+    let cx = 0, cy = 0, cz = 0, n = 0;
+    for (const unit of structure.units) {
+      const conf = unit.model.atomicConformation;
+      for (const eI of unit.elements) {
+        cx += conf.x[eI]; cy += conf.y[eI]; cz += conf.z[eI]; n++;
+      }
+    }
+    if (!n) return null;
+    _structureCenter = [cx / n, cy / n, cz / n];
+    return _structureCenter;
+  }
+
+  // Orbit the camera so the target sphere is between camera and structure
+  // center — i.e., facing the viewer rather than hiding behind the rest of
+  // the protein. Falls back to a plain dolly if the target is too close
+  // to the structure center to define a meaningful "outside" direction.
+  function focusFacing(center, radius, durationMs = 500) {
+    const cam = viewer.plugin.canvas3d.camera;
+    const snap = cam.getSnapshot();
+    const origin = getStructureCenter();
+
+    if (!origin) {
+      cam.focus(center, radius, durationMs);
+      return;
+    }
+
+    let dx = center[0] - origin[0];
+    let dy = center[1] - origin[1];
+    let dz = center[2] - origin[2];
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 0.5) {
+      cam.focus(center, radius, durationMs);
+      return;
+    }
+    dx /= len; dy /= len; dz /= len;
+
+    // Distance from camera to target: scale with residue size, with a floor
+    // so very small residues don't collapse the camera onto them.
+    const viewDist = Math.max(radius * 6, 14);
+
+    cam.setState({
+      ...snap,
+      position: [center[0] + dx * viewDist, center[1] + dy * viewDist, center[2] + dz * viewDist],
+      target:   [center[0], center[1], center[2]],
+      radius:   radius * 1.4,
+    }, durationMs);
+  }
+
+  function boundingSphere(points) {
+    let cx = 0, cy = 0, cz = 0;
+    for (const p of points) { cx += p[0]; cy += p[1]; cz += p[2]; }
+    cx /= points.length; cy /= points.length; cz /= points.length;
+    let r2 = 0;
+    for (const [x, y, z] of points) {
+      const d = (x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2;
+      if (d > r2) r2 = d;
+    }
+    const r = Math.max(Math.sqrt(r2) + FOCUS_PADDING, FOCUS_MIN_RADIUS);
+    return { center: [cx, cy, cz], radius: r };
+  }
+
+  // --- Sidebar sync -------------------------------------------------------
+  function markActiveChip(compId, seqNum) {
+    const label = `${compId}${seqNum}`;
+    document.querySelectorAll('.res-chip.active').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.chain-group.active').forEach(el => el.classList.remove('active'));
+    // Mark every chip matching the label — residues like DG11 exist on both
+    // DNA strands, and Mol* selects both copies, so the sidebar should too.
+    const matches = [...document.querySelectorAll('.res-chip')].filter(c => c.textContent === label);
+    matches.forEach(el => el.classList.add('active'));
+    if (matches.length) {
+      matches[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+  function markActiveChain(chainId) {
+    document.querySelectorAll('.res-chip.active').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.chain-group.active').forEach(el => el.classList.remove('active'));
+    const groups = [...document.querySelectorAll('.chain-group')];
+    const group = groups.find(g => g.querySelector('h3')?.textContent.startsWith(`Chain ${chainId}`));
+    if (group) {
+      group.classList.add('active');
+      group.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+  function clearActiveMarkers() {
+    document.querySelectorAll('.res-chip.active, .chain-group.active')
+      .forEach(el => el.classList.remove('active'));
+  }
+
+  const actions = {
+    focusResidue(compId, seqNum) {
+      const hit = findResidue(compId, seqNum);
+      if (!hit) return { ok: false, reason: `${compId}${seqNum} not found in structure` };
+
+      const { center, radius } = boundingSphere(hit.points);
+      focusFacing(center, radius, 500);
+      markActiveChip(compId, seqNum);
+      return { ok: true, reason: `focused ${compId}${seqNum}` };
+    },
+
+    clickResidue(compId, seqNum) {
+      const hit = findResidue(compId, seqNum);
+      if (!hit) return { ok: false, reason: `${compId}${seqNum} not found in structure` };
+
+      const p = viewer.plugin;
+      p.managers.structure.focus.setFromLoci(hit.loci);
+      p.managers.interactivity.lociSelects.selectOnly({ loci: hit.loci });
+      const { center, radius } = boundingSphere(hit.points);
+      // Orbit so the residue is on the camera-side of the protein rather
+      // than potentially behind it.
+      focusFacing(center, radius, 500);
+
+      markActiveChip(compId, seqNum);
+      return { ok: true, reason: `clicked ${compId}${seqNum}` };
+    },
+
+    focusChain(chainId) {
+      const hit = findMatching(P.chain(chainId));
+      if (!hit) return { ok: false, reason: `chain ${chainId} not found` };
+      const p = viewer.plugin;
+      p.managers.interactivity.lociSelects.selectOnly({ loci: hit.loci });
+      const { center, radius } = boundingSphere(hit.points);
+      p.canvas3d.camera.focus(center, radius * 1.3, 600);
+      markActiveChain(chainId);
+      return { ok: true, reason: `focused chain ${chainId}` };
+    },
+
+    deselectAll() {
+      const p = viewer.plugin;
+      p.managers.interactivity.lociSelects.deselectAll();
+      p.managers.structure.focus.clear();
+      clearActiveMarkers();
+      return { ok: true, reason: 'deselected' };
+    },
+
+    zoom(factor) {
+      const cam = viewer.plugin.canvas3d.camera;
+      const s = cam.getSnapshot();
+      // camera.focus(target, radius) actually dollies the camera along the
+      // view vector — the mouse-wheel equivalent. setState({radius}) alone
+      // only edits the snapshot and doesn't re-render the zoom.
+      const radius = Math.max(1, Math.min(s.radius * factor, 10000));
+      cam.focus(s.target, radius, 250);
+      return { ok: true, reason: factor < 1 ? 'zoomed in' : 'zoomed out' };
+    },
+
+    rotate(dir) {
+      const cam = viewer.plugin.canvas3d.camera;
+      const s = cam.getSnapshot();
+      const angle = (30 * Math.PI) / 180; // 30° per command — about 8% of a turn
+      const sign = (dir === 'left' || dir === 'down') ? -1 : 1;
+
+      const [px, py, pz] = s.position;
+      const [tx, ty, tz] = s.target;
+      const [ux, uy, uz] = s.up;
+
+      // Vector from target to camera position.
+      const rx = px - tx, ry = py - ty, rz = pz - tz;
+
+      // Rotation axis: yaw = around up; pitch = around the "right" vector
+      // (perpendicular to both view direction and up).
+      let ax, ay, az;
+      if (dir === 'left' || dir === 'right') {
+        ax = ux; ay = uy; az = uz;
+      } else {
+        // right = normalize((target - position) × up)
+        const dx = -rx, dy = -ry, dz = -rz;
+        const cx = dy * uz - dz * uy;
+        const cy = dz * ux - dx * uz;
+        const cz = dx * uy - dy * ux;
+        const len = Math.hypot(cx, cy, cz) || 1;
+        ax = cx / len; ay = cy / len; az = cz / len;
+      }
+
+      // Rodrigues' rotation formula applied to (position - target).
+      const a = angle * sign;
+      const cos = Math.cos(a), sin = Math.sin(a);
+      const dot = ax * rx + ay * ry + az * rz;
+      const crossX = ay * rz - az * ry;
+      const crossY = az * rx - ax * rz;
+      const crossZ = ax * ry - ay * rx;
+      const nrx = rx * cos + crossX * sin + ax * dot * (1 - cos);
+      const nry = ry * cos + crossY * sin + ay * dot * (1 - cos);
+      const nrz = rz * cos + crossZ * sin + az * dot * (1 - cos);
+
+      // For pitch, also rotate the up vector so the horizon doesn't tip.
+      let newUp = [ux, uy, uz];
+      if (dir === 'up' || dir === 'down') {
+        const udot = ax * ux + ay * uy + az * uz;
+        const ucX = ay * uz - az * uy;
+        const ucY = az * ux - ax * uz;
+        const ucZ = ax * uy - ay * ux;
+        newUp = [
+          ux * cos + ucX * sin + ax * udot * (1 - cos),
+          uy * cos + ucY * sin + ay * udot * (1 - cos),
+          uz * cos + ucZ * sin + az * udot * (1 - cos),
+        ];
+      }
+
+      cam.setState({
+        ...s,
+        position: [tx + nrx, ty + nry, tz + nrz],
+        up: newUp,
+      }, 300);
+
+      return { ok: true, reason: `rotated ${dir}` };
+    },
+
+    reset() {
+      viewer.plugin.managers.camera.reset(undefined, 500);
+      return { ok: true, reason: 'reset view' };
+    },
+
+    spin(on, speed = 1) {
+      viewer.plugin.canvas3d.setProps({
+        trackball: {
+          animate: on
+            ? { name: 'spin', params: { speed } }
+            : { name: 'off', params: {} },
+        },
+      });
+      return { ok: true, reason: on ? 'spinning' : 'stopped' };
+    },
+  };
+
+  // --- Voice --------------------------------------------------------------
+  const RESIDUE_CODES = new Set([
+    'DA','DC','DG','DT',          // DNA
+    'A','C','G','U',              // RNA
+    'ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE',
+    'LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL',
+  ]);
+
+  // Full names + common speech-recognition mishears → 3-letter code.
+  // Chrome tends to transcribe 3-letter codes as the closest English word,
+  // so we map those back. Also supports saying the full residue name.
+  const RESIDUE_ALIASES = {
+    // Full amino-acid names
+    alanine: 'ALA',
+    arginine: 'ARG',
+    asparagine: 'ASN', aspartate: 'ASP', aspartic: 'ASP',
+    cysteine: 'CYS',
+    glutamine: 'GLN', glutamate: 'GLU', glutamic: 'GLU',
+    glycine: 'GLY',
+    histidine: 'HIS',
+    isoleucine: 'ILE',
+    leucine: 'LEU',
+    lysine: 'LYS',
+    methionine: 'MET',
+    phenylalanine: 'PHE',
+    proline: 'PRO',
+    serine: 'SER',
+    threonine: 'THR',
+    tryptophan: 'TRP',
+    tyrosine: 'TYR',
+    valine: 'VAL',
+    // Full DNA nucleoside names
+    deoxyadenosine: 'DA', deoxycytidine: 'DC',
+    deoxyguanosine: 'DG', thymidine: 'DT',
+    adenine: 'DA', cytosine: 'DC', guanine: 'DG', thymine: 'DT',
+    // Common Chrome mishears of the 3-letter codes
+    glue: 'GLU',
+    isle: 'ILE', aisle: 'ILE',
+    lou: 'LEU', lew: 'LEU',
+    sir: 'SER',
+    thor: 'THR',
+    tyre: 'TYR', tire: 'TYR',
+    trip: 'TRP', tripp: 'TRP',
+    fee: 'PHE',
+    glen: 'GLN', glean: 'GLN',
+    glee: 'GLY',
+    lice: 'LYS', like: 'LYS',
+    cyst: 'CYS',
+    aspen: 'ASP', asp: 'ASP',
+    'arg': 'ARG', argue: 'ARG',
+  };
+
+  const NUMBER_WORDS = {
+    zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8,
+    nine:9, ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14,
+    fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19, twenty:20,
+  };
+
+  // Phonetic letter tokens we sometimes get from speech ("dee gee three").
+  const LETTER_WORDS = {
+    ay:'a', bee:'b', cee:'c', see:'c', dee:'d', ee:'e', eff:'f', gee:'g',
+    aitch:'h', eye:'i', jay:'j', kay:'k', el:'l', em:'m', en:'n', oh:'o',
+    pee:'p', cue:'q', are:'r', ess:'s', tee:'t', you:'u', vee:'v',
+    ex:'x', why:'y', zee:'z', zed:'z',
+  };
+
+  function normalizeSpeech(raw) {
+    // Chrome likes to insert hyphens (walk-through) and commas. Replace all
+    // common punctuation with spaces so token boundaries stay uniform.
+    let s = raw.toLowerCase().replace(/[-.,!?;:]/g, ' ');
+    // Number words → digits.
+    s = s.replace(/\b([a-z]+)\b/g, w => NUMBER_WORDS[w] != null ? String(NUMBER_WORDS[w]) : w);
+    // Spelled letters → letters.
+    s = s.replace(/\b([a-z]+)\b/g, w => LETTER_WORDS[w] || w);
+    // Collapse consecutive single letters: "d g" → "dg", "a l a" → "ala".
+    // Two passes handles 3-letter codes cleanly.
+    for (let i = 0; i < 2; i++) {
+      s = s.replace(/\b([a-z])\s+([a-z])\b/g, '$1$2');
+    }
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
+  // Flat lookup: every valid spoken word → canonical compId.
+  const RESIDUE_LOOKUP = (() => {
+    const m = new Map();
+    for (const code of RESIDUE_CODES) m.set(code.toLowerCase(), code);
+    for (const [k, v] of Object.entries(RESIDUE_ALIASES)) m.set(k, v);
+    return m;
+  })();
+
+  // Classic Levenshtein — small vocabulary so O(n·m) is fine.
+  function editDistance(a, b) {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const prev = new Array(b.length + 1);
+    const curr = new Array(b.length + 1);
+    for (let j = 0; j <= b.length; j++) prev[j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      curr[0] = i;
+      for (let j = 1; j <= b.length; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      }
+      for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+    }
+    return prev[b.length];
+  }
+
+  // Best-effort residue recognition: exact → prefix → edit distance.
+  function fuzzyMatchResidue(word) {
+    const lower = word.toLowerCase();
+    if (!lower) return null;
+
+    // Exact
+    if (RESIDUE_LOOKUP.has(lower)) return RESIDUE_LOOKUP.get(lower);
+
+    // Prefix either direction — "glutamat" ↔ "glutamate", "histid" → "HIS".
+    // Require at least 3 chars of overlap to avoid "a" matching "alanine".
+    for (const [key, compId] of RESIDUE_LOOKUP) {
+      if (key.length < 3 || lower.length < 3) continue;
+      if (key.startsWith(lower) || lower.startsWith(key)) return compId;
+    }
+
+    // Edit distance with a length-sensitive threshold. Short words (3-char
+    // codes) allow 1 edit; longer names allow 2.
+    let best = null, bestDist = Infinity;
+    for (const [key, compId] of RESIDUE_LOOKUP) {
+      if (Math.abs(key.length - lower.length) > 2) continue;
+      const d = editDistance(lower, key);
+      const allowed = key.length <= 4 ? 1 : 2;
+      if (d <= allowed && d < bestDist) { bestDist = d; best = compId; }
+    }
+    return best;
+  }
+
+  // Chrome sometimes transcribes spoken digits as their homophones
+  // ("four" → "for", "two" → "to", "one" → "won", "eight" → "ate").
+  // Applied locally in the residue parser so it doesn't corrupt unrelated
+  // speech ("look for glutamate" etc).
+  const NUMBER_HOMOPHONES = { for: '4', to: '2', too: '2', won: '1', ate: '8' };
+
+  function parseResidueFrom(text) {
+    // Replace homophones ONLY where they look like a number-in-position
+    // (following a word candidate). This keeps "look for" intact if nothing
+    // else in the command treats it as a residue target.
+    const t = text.replace(
+      /\b([a-z]+)\s+(for|to|too|won|ate)\b/g,
+      (_, word, num) => `${word} ${NUMBER_HOMOPHONES[num]}`
+    );
+    const m = t.match(/\b([a-z]+)\s*(\d+)\b/);
+    if (!m) return null;
+    const compId = fuzzyMatchResidue(m[1]);
+    if (!compId) return null;
+    return { compId, seqNum: parseInt(m[2], 10) };
+  }
+
+  function parseCommand(raw) {
+    const t = normalizeSpeech(raw);
+    if (!t) return null;
+
+    if (/\bzoom\s*in\b/.test(t) || /\bcloser\b/.test(t))   return { type: 'zoom', factor: 0.67 };
+    if (/\bzoom\s*out\b/.test(t) || /\bfarther\b/.test(t)) return { type: 'zoom', factor: 1.5 };
+
+    const rotMatch = t.match(/\b(rotate|turn)\s+(right|left|up|down)\b/);
+    if (rotMatch) return { type: 'rotate', dir: rotMatch[2] };
+    if (/\b(reset|default|home)\b/.test(t))                return { type: 'reset' };
+    if (/\b(stop|halt|freeze)\b/.test(t))                  return { type: 'spin', on: false };
+    if (/\b(spin|rotate)\b/.test(t))                       return { type: 'spin', on: true };
+    if (/\b(deselect|unselect|clear\s+selection)\b/.test(t)) return { type: 'deselect' };
+    if (/\bclear\b/.test(t))                               return { type: 'clear' };
+
+    // Capability demo: "what can I do", "what can you do", "help", "demo".
+    if (/\bwhat\s+can\s+(i|you)\s+do\b/.test(t) || /\b(show|run)\s+(the\s+)?demo\b/.test(t)) {
+      return { type: 'intro-demo' };
+    }
+
+    // Walk-through a whole chain. Must run before the bare chain match
+    // below so "walk through chain A" isn't shortcircuited into a focus.
+    // Accepts "walk chain A", "walk through chain A", "walkthrough chain A",
+    // "walk-through chain A" (the hyphen is stripped by the normalizer),
+    // and "walkthru chain A".
+    const walkMatch = t.match(/\bwalk(?:\s*(?:through|thru))?\s+chain\s+([a-z])\b/);
+    if (walkMatch) return { type: 'tour-chain', chainId: walkMatch[1].toUpperCase() };
+
+    // Main guided tour: "guided tour", "start tour", "walk through tour",
+    // "walk through guided tour", or bare "walkthrough".
+    if (/\b(guided\s+tour|start\s+(?:the\s+)?tour|walk\s*through\s+(?:guided\s+)?tour|walkthrough)\b/.test(t)) {
+      return { type: 'tour-main' };
+    }
+
+    // Stop tour mid-play: "stop tour", "end tour".
+    if (/\b(stop|end|cancel)\s+(?:the\s+)?tour\b/.test(t)) return { type: 'tour-stop' };
+
+    // Explicit mic toggle: "stop listening", "mute".
+    // Must precede the bare-"stop" spin handler below.
+    if (/\bstop\s+listening\b|\bstop\s+the\s+mic\b|\bmute\b/.test(t)) {
+      return { type: 'stop-listening' };
+    }
+
+    // Chain command: "focus chain A", "click chain B", bare "chain C".
+    const chainMatch = t.match(/\bchain\s+([a-z])\b/);
+    if (chainMatch) {
+      const chainId = chainMatch[1].toUpperCase();
+      return { type: 'focus-chain', chainId };
+    }
+
+    // Click = select + highlight (no camera move).
+    const clickMatch = t.match(/\b(click|select|highlight|pick)\b\s*(.*)/);
+    if (clickMatch) {
+      const res = parseResidueFrom(clickMatch[2]);
+      if (res) return { type: 'click', ...res };
+    }
+
+    // Focus = camera move (no selection change).
+    const focusMatch = t.match(/\b(focus|show|go\s*to|look\s*at|zoom\s+to)\b\s*(.*)/);
+    const candidate = focusMatch ? focusMatch[2] : t;
+    const res = parseResidueFrom(candidate);
+    if (res) return { type: 'focus', ...res };
+
+    return null;
+  }
+
+  function runCommand(cmd) {
+    switch (cmd.type) {
+      case 'focus':       return actions.focusResidue(cmd.compId, cmd.seqNum);
+      case 'click':       return actions.clickResidue(cmd.compId, cmd.seqNum);
+      case 'focus-chain': return actions.focusChain(cmd.chainId);
+      case 'deselect':    return actions.deselectAll();
+      case 'zoom':        return actions.zoom(cmd.factor);
+      case 'rotate':      return actions.rotate(cmd.dir);
+      case 'reset':       return actions.reset();
+      case 'spin':        return actions.spin(cmd.on);
+
+      case 'intro-demo': {
+        if (tourPlaying) { stopTour(); return { ok: true, reason: 'stopped tour' }; }
+        voiceStopListening();
+        playTour(buildIntroTour(), $('assistant-btn'), '', { autoSpin: false, resumeListening: true });
+        return { ok: true, reason: 'playing capability demo' };
+      }
+      case 'tour-main': {
+        if (tourPlaying) { stopTour(); return { ok: true, reason: 'stopped tour' }; }
+        voiceStopListening();
+        playTour(TOUR, $('tour-btn'), 'Start guided tour', { resumeListening: true });
+        return { ok: true, reason: 'started guided tour' };
+      }
+      case 'tour-chain': {
+        if (tourPlaying) stopTour();
+        voiceStopListening();
+        const structure = getStructure();
+        const DNA_CODES = new Set(['DA','DC','DG','DT']);
+        let kind = 'protein';
+        if (structure) {
+          // Same detection renderWalkButtons does — figure out if it's DNA.
+          outer: for (const unit of structure.units) {
+            const h = unit.model.atomicHierarchy;
+            for (let i = 0, il = unit.elements.length; i < il; i++) {
+              const cI = h.chainAtomSegments?.index?.[unit.elements[i]];
+              if (cI == null) continue;
+              if (h.chains.auth_asym_id.value(cI) !== cmd.chainId) continue;
+              kind = DNA_CODES.has(h.atoms.label_comp_id.value(unit.elements[i])) ? 'dna' : 'protein';
+              break outer;
+            }
+          }
+        }
+        const btn = [...document.querySelectorAll('#walk-btns .walk-btn')]
+          .find(b => b.dataset.idleLabel === `Walk chain ${cmd.chainId}`);
+        if (!btn) return { ok: false, reason: `chain ${cmd.chainId} not found` };
+        playTour(buildChainWalkTour(cmd.chainId, kind), btn, btn.dataset.idleLabel,
+                 { autoSpin: true, resumeListening: true });
+        return { ok: true, reason: `walking chain ${cmd.chainId}` };
+      }
+      case 'tour-stop':
+        stopTour();
+        return { ok: true, reason: 'stopped tour' };
+
+      case 'stop-listening':
+        voiceStopListening();
+        return { ok: true, reason: 'stopped listening' };
+
+      case 'clear':
+        $('voice-transcript').textContent = '';
+        $('voice-result').textContent = '';
+        return { ok: true, reason: 'cleared' };
+    }
+  }
+
+  // Build + play a short demo on first click so the user sees what they
+  // can say. Marks itself "seen" in localStorage so subsequent clicks go
+  // straight to listening mode.
+  function buildIntroTour() {
+    const first5 = listResidues('A').slice(0, 5);
+
+    const steps = [
+      {
+        action: () => {
+          viewer.plugin.managers.interactivity.lociSelects.deselectAll();
+          viewer.plugin.managers.structure.focus.clear();
+          actions.spin(false);
+          actions.reset();
+        },
+        text: "Hi — I'm the voice assistant. I can drive this viewer hands-free. Let me show you three things you can ask me to do.",
+      },
+      {
+        action: () => {},
+        text: "First, I can walk through a whole chain, one residue at a time. Here are the first five of chain A.",
+      },
+    ];
+
+    for (const { compId, seqNum } of first5) {
+      steps.push({
+        action: () => actions.clickResidue(compId, seqNum),
+        text: `Position ${seqNum}: ${describeResidue(compId)}.`,
+      });
+    }
+
+    steps.push(
+      {
+        action: () => actions.clickResidue('DG', 3),
+        text: "Second, I can focus on any single element. For example, clicking guanine three on the D N A.",
+      },
+      {
+        action: () => actions.zoom(0.5),
+        text: "Third, I can zoom and rotate the view. Zooming in.",
+      },
+      {
+        action: () => actions.rotate('right'),
+        text: "And rotating right.",
+      },
+      {
+        action: () => {
+          viewer.plugin.managers.interactivity.lociSelects.deselectAll();
+          viewer.plugin.managers.structure.focus.clear();
+          actions.reset();
+        },
+        text: "Now it's your turn. Click me again and speak. Try saying 'walk through chain B', 'guided tour', or 'click glutamate four'.",
+      },
+    );
+
+    return steps;
+  }
+
+  async function playIntroTour(btn) {
+    const steps = buildIntroTour();
+    // No auto-spin: mixing orbit-around-residue with zoom/rotate steps is
+    // visually jarring. Walks-proper keep autoSpin enabled on their own.
+    await playTour(steps, btn, '', { autoSpin: false });
+  }
+
+  function initVoice() {
+    const btn = $('assistant-btn');
+    const panel = $('assistant-panel');
+    const transcriptEl = $('voice-transcript');
+    const resultEl = $('voice-result');
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    const showPanel = () => panel.classList.add('visible');
+    const hidePanel = () => panel.classList.remove('visible');
+
+    if (!SR) {
+      btn.disabled = true;
+      btn.title = 'Voice not supported (use Chrome or Edge)';
+      return;
+    }
+
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+
+    let listening = false;
+    let hideTimer = null;
+    const scheduleHide = (ms = 4000) => {
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(hidePanel, ms);
+    };
+    const keepOpen = () => { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } };
+
+    const PROMPT = "Say \u201Cwhat can I do\u201D to see what I can do\u2026";
+
+    // Fires the moment Chrome actually opens the mic — including after the
+    // first-time permission prompt. Re-apply the visible prompt then, so
+    // any interim state changes during the permission dialog are undone.
+    rec.onstart = () => {
+      transcriptEl.textContent = PROMPT;
+      resultEl.textContent = '';
+      resultEl.classList.remove('miss');
+      keepOpen();
+      showPanel();
+    };
+
+    rec.onresult = (ev) => {
+      let interim = '', final = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        if (r.isFinal) final += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      const heard = (final || interim).trim();
+      transcriptEl.textContent = heard || PROMPT;
+
+      if (final) {
+        const cmd = parseCommand(final);
+        if (!cmd) {
+          resultEl.textContent = `didn't match: "${final.trim()}"`;
+          resultEl.classList.add('miss');
+        } else {
+          const out = runCommand(cmd);
+          resultEl.textContent = out.ok ? `✓ ${out.reason}` : `✗ ${out.reason}`;
+          resultEl.classList.toggle('miss', !out.ok);
+        }
+      }
+    };
+
+    rec.onerror = (ev) => {
+      // Transient: no-speech (silence timeout) and aborted (stop() called
+      // or permission flow). Don't break the session for these.
+      if (ev.error === 'no-speech' || ev.error === 'aborted') return;
+      resultEl.textContent = `mic error: ${ev.error}`;
+      resultEl.classList.add('miss');
+      listening = false;
+      btn.classList.remove('listening');
+      scheduleHide();
+    };
+
+    rec.onend = () => {
+      // Auto-restart if the user didn't stop explicitly — Chrome cuts the
+      // stream after ~60s of silence.
+      if (listening) {
+        try { rec.start(); } catch (_) { /* already starting */ }
+      }
+    };
+
+    btn.disabled = false;
+
+    // Exposed so voice-command handlers can pause and resume the mic
+    // around tour playback — otherwise TTS output feeds back in, or the
+    // mic stays off after the tour ends.
+    voiceStopListening = () => {
+      if (listening) {
+        listening = false;
+        btn.classList.remove('listening');
+        try { rec.stop(); } catch (_) {}
+      }
+    };
+    voiceStartListening = () => {
+      if (!listening) {
+        listening = true;
+        btn.classList.add('listening');
+        transcriptEl.textContent = PROMPT;
+        resultEl.textContent = '';
+        resultEl.classList.remove('miss');
+        keepOpen();
+        showPanel();
+        try { rec.start(); } catch (_) {}
+      }
+    };
+
+    btn.onclick = () => {
+      if (tourPlaying) { stopTour(); return; }
+
+      listening = !listening;
+      btn.classList.toggle('listening', listening);
+      if (listening) {
+        transcriptEl.textContent = "Say \u201Cwhat can I do\u201D to see what I can do\u2026";
+        resultEl.textContent = '';
+        resultEl.classList.remove('miss');
+        keepOpen();
+        showPanel();
+        try { rec.start(); } catch (_) {}
+      } else {
+        rec.stop();
+        scheduleHide();
+      }
+    };
+
+    // Let users peek at the hint/last-result without activating the mic.
+    btn.addEventListener('mouseenter', () => { keepOpen(); showPanel(); });
+    btn.addEventListener('mouseleave', () => { if (!listening) scheduleHide(2000); });
+  }
+
+  // --- Guided tour --------------------------------------------------------
+  // Narration written for a non-biologist audience. Each step is
+  // (action → then speak); action fires first so the camera/highlight
+  // animates under the opening words of the sentence.
+  const TOUR = [
+    {
+      action: () => {
+        viewer.plugin.managers.interactivity.lociSelects.deselectAll();
+        viewer.plugin.managers.structure.focus.clear();
+        actions.reset();
+        setTimeout(() => actions.spin(true), 600);
+      },
+      text:
+        "What you're looking at is a tiny piece of cellular machinery. " +
+        "A small protein has wrapped itself around a short piece of D N A, " +
+        "and the whole thing is rotating so you can get a feel for its shape.",
+    },
+    {
+      action: () => {
+        actions.spin(false);
+        const hit = findMatching(P.chain('B'));
+        if (hit) {
+          viewer.plugin.managers.interactivity.lociSelects.selectOnly({ loci: hit.loci });
+          const { center, radius } = boundingSphere(hit.points);
+          viewer.plugin.canvas3d.camera.focus(center, radius * 1.4, 800);
+        }
+      },
+      text:
+        "This is the D N A — the famous double helix. It's fifteen letters long, " +
+        "a very short stretch of genetic code. You can see the two strands twisting " +
+        "around each other like a spiral staircase.",
+    },
+    {
+      action: () => {
+        const hit = findMatching(P.chain('A'));
+        if (hit) {
+          viewer.plugin.managers.interactivity.lociSelects.selectOnly({ loci: hit.loci });
+          const { center, radius } = boundingSphere(hit.points);
+          viewer.plugin.canvas3d.camera.focus(center, radius * 1.3, 800);
+        }
+      },
+      text:
+        "And this is the protein — a chain of eighty-nine amino acids folded into a " +
+        "compact shape. Think of it as a little molecular gripper, built specifically " +
+        "to recognize and hold on to this exact stretch of D N A.",
+    },
+    {
+      action: () => highlightAll('LYS'),
+      text:
+        "The protein's surface is studded with positively charged amino acids. " +
+        "These are the lysines. They reach out toward the D N A and latch onto its " +
+        "backbone, which carries a negative charge. Opposites attract.",
+    },
+    {
+      action: () => highlightAll('ARG'),
+      text:
+        "These are the arginines — another positively charged residue doing similar " +
+        "work. Together with the lysines, they're the glue holding the protein " +
+        "against the D N A.",
+    },
+    {
+      action: () => highlightAll('GLU'),
+      text:
+        "And these are the glutamates — negatively charged. They don't grip the D N A " +
+        "directly; instead they shape the rest of the protein and make sure it sits " +
+        "in just the right place.",
+    },
+    {
+      action: () => actions.clickResidue('DG', 3),
+      text:
+        "Let's zoom in on a single letter of D N A. This is a guanine — one of the " +
+        "four letters that make up the genetic alphabet: A, T, G, and C. Each letter " +
+        "is a different small molecule attached to the backbone.",
+    },
+    {
+      action: () => {
+        viewer.plugin.managers.interactivity.lociSelects.deselectAll();
+        viewer.plugin.managers.structure.focus.clear();
+        actions.reset();
+      },
+      text:
+        "And that's the whole complex — a short genetic message, and a protein built " +
+        "to read it. Explore it yourself: click anywhere on the structure, or use the " +
+        "voice controls on the left.",
+    },
+  ];
+
+  function highlightAll(compId) {
+    actions.spin(false);
+    const hit = findMatching(P.compId(compId));
+    if (!hit) return;
+    viewer.plugin.managers.interactivity.lociSelects.selectOnly({ loci: hit.loci });
+    const { center, radius } = boundingSphere(hit.points);
+    // Pull the camera back a touch so the cluster isn't cropped.
+    viewer.plugin.canvas3d.camera.focus(center, radius * 1.25, 800);
+  }
+
+  let tourPlaying = false;
+  let narrateOn = true;
+  let voiceStopListening = () => {};
+  let voiceStartListening = () => {};
+
+  // Silent walk: roughly half the duration of spoken narration.
+  // TTS at rate 1.0 ≈ 3 words/sec, so 6 words/sec here. Floor keeps short
+  // captions from flashing too briefly to read.
+  function readingDelay(text) {
+    const words = text.trim().split(/\s+/).length;
+    return Math.min(3000, Math.max(700, (words / 6) * 1000));
+  }
+
+  function speak(text) {
+    if (!narrateOn || !('speechSynthesis' in window)) {
+      return new Promise(r => setTimeout(r, readingDelay(text)));
+    }
+    return new Promise(resolve => {
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.0;
+      u.pitch = 1.0;
+      const voices = speechSynthesis.getVoices();
+      const preferred = voices.find(v =>
+        /Samantha|Karen|Google US English|Microsoft Aria|Microsoft Jenny/i.test(v.name)
+      );
+      if (preferred) u.voice = preferred;
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+      speechSynthesis.speak(u);
+    });
+  }
+
+  function showCaption(text) {
+    const el = $('caption');
+    el.textContent = text;
+    el.classList.add('visible');
+  }
+  function hideCaption() {
+    $('caption').classList.remove('visible');
+  }
+
+  // Shared by playTour and stopTour so both paths know whether to resume
+  // the mic once the tour exits.
+  let _currentTourOpts = {};
+
+  async function playTour(tour = TOUR, startBtn = $('tour-btn'), idleLabel = 'Start guided tour', opts = {}) {
+    if (tourPlaying) return;
+    _currentTourOpts = opts;
+    // autoSpin: after each step's camera move lands, orbit slowly around the
+    // newly-focused residue until the next step cuts it. Used by chain-walks.
+    const autoSpin = !!opts.autoSpin;
+    const SPIN_DELAY_MS = 700; // let focusFacing's 500ms animation finish first
+    const SPIN_SPEED = 0.35;
+
+    tourPlaying = true;
+    const isIconBtn = startBtn && startBtn.querySelector('img');
+    if (startBtn) {
+      if (!isIconBtn) startBtn.textContent = 'Stop';
+      startBtn.classList.add('playing');
+    }
+
+    let spinTimer = null;
+    const cancelPendingSpin = () => { if (spinTimer) { clearTimeout(spinTimer); spinTimer = null; } };
+
+    for (const step of tour) {
+      if (!tourPlaying) break;
+
+      if (autoSpin) {
+        cancelPendingSpin();
+        actions.spin(false);
+      }
+
+      try { step.action(); } catch (e) { console.warn('tour step failed', e); }
+      showCaption(step.text);
+
+      if (autoSpin) {
+        spinTimer = setTimeout(() => {
+          if (tourPlaying) actions.spin(true, SPIN_SPEED);
+        }, SPIN_DELAY_MS);
+      }
+
+      await speak(step.text);
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    cancelPendingSpin();
+    if (autoSpin) actions.spin(false);
+
+    tourPlaying = false;
+    if (startBtn) {
+      if (!isIconBtn) startBtn.textContent = idleLabel;
+      startBtn.classList.remove('playing');
+    }
+    hideCaption();
+
+    // Re-open the mic for the next command if the tour was started by voice.
+    if (opts.resumeListening) voiceStartListening();
+    _currentTourOpts = {};
+  }
+
+  function stopTour() {
+    const shouldResume = !!_currentTourOpts.resumeListening;
+    tourPlaying = false;
+    _currentTourOpts = {};
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    try { actions.spin(false); } catch (_) {}
+    hideCaption();
+    document.querySelectorAll('.playing').forEach(b => {
+      b.classList.remove('playing');
+      if (!b.querySelector('img')) {
+        b.textContent = b.dataset.idleLabel || 'Start guided tour';
+      }
+    });
+    if (shouldResume) voiceStartListening();
+  }
+
+  // --- Chain walk ---------------------------------------------------------
+  // Short human-readable description per residue type. Used to auto-generate
+  // narration when walking a full chain.
+  const AA_DESC = {
+    ALA: 'alanine — small and hydrophobic',
+    ARG: 'arginine — positively charged, good at gripping D N A',
+    ASN: 'asparagine — polar, makes hydrogen bonds',
+    ASP: 'aspartate — negatively charged',
+    CYS: 'cysteine — can form disulfide bridges',
+    GLN: 'glutamine — polar, forms hydrogen bonds',
+    GLU: 'glutamate — negatively charged',
+    GLY: 'glycine — the smallest amino acid, adds flexibility',
+    HIS: 'histidine — often found in active sites',
+    ILE: 'isoleucine — hydrophobic',
+    LEU: 'leucine — hydrophobic, very common',
+    LYS: 'lysine — positively charged, a classic D N A gripper',
+    MET: 'methionine — hydrophobic, often the first amino acid in a protein',
+    PHE: 'phenylalanine — bulky aromatic, hydrophobic',
+    PRO: 'proline — creates kinks in the backbone',
+    SER: 'serine — small polar',
+    THR: 'threonine — small polar',
+    TRP: 'tryptophan — bulky aromatic',
+    TYR: 'tyrosine — aromatic, can be modified',
+    VAL: 'valine — hydrophobic',
+  };
+  const NT_DESC = {
+    DA: 'a deoxyadenosine — the letter A, pairs with T',
+    DC: 'a deoxycytidine — the letter C, pairs with G',
+    DG: 'a deoxyguanosine — the letter G, pairs with C',
+    DT: 'a thymidine — the letter T, pairs with A',
+  };
+
+  function listResidues(chainId) {
+    const structure = getStructure();
+    if (!structure) return [];
+    const seen = new Set();
+    const out = [];
+    for (const unit of structure.units) {
+      const { elements } = unit;
+      const h = unit.model.atomicHierarchy;
+      const chainIndex = h.chainAtomSegments?.index;
+      const resIndex = h.residueAtomSegments?.index;
+      if (!chainIndex || !resIndex) continue;
+      for (let i = 0, il = elements.length; i < il; i++) {
+        const eI = elements[i];
+        if (h.chains.auth_asym_id.value(chainIndex[eI]) !== chainId) continue;
+        const rI = resIndex[eI];
+        if (seen.has(rI)) continue;
+        seen.add(rI);
+        out.push({
+          compId: h.atoms.label_comp_id.value(eI),
+          seqNum: h.residues.auth_seq_id.value(rI),
+        });
+      }
+    }
+    return out.sort((a, b) => a.seqNum - b.seqNum);
+  }
+
+  function describeResidue(compId) {
+    return AA_DESC[compId] || NT_DESC[compId] || compId;
+  }
+
+  function buildChainWalkTour(chainId, kind) {
+    const residues = listResidues(chainId);
+    const intro = kind === 'protein'
+      ? `Walking through the protein chain, one amino acid at a time. There are ${residues.length} residues in total.`
+      : `Walking through this D N A strand, one nucleoside at a time. There are ${residues.length} bases in this strand.`;
+
+    const steps = [{
+      action: () => {
+        viewer.plugin.managers.interactivity.lociSelects.deselectAll();
+        viewer.plugin.managers.structure.focus.clear();
+        actions.spin(false);
+      },
+      text: intro,
+    }];
+
+    for (const { compId, seqNum } of residues) {
+      steps.push({
+        action: () => actions.clickResidue(compId, seqNum),
+        text: `Position ${seqNum}: ${describeResidue(compId)}.`,
+      });
+    }
+
+    steps.push({
+      action: () => {
+        viewer.plugin.managers.interactivity.lociSelects.deselectAll();
+        viewer.plugin.managers.structure.focus.clear();
+        actions.reset();
+      },
+      text: `End of chain ${chainId}.`,
+    });
+
+    return steps;
+  }
+
+  function renderResidueList() {
+    const structure = getStructure();
+    const root = $('residues');
+    if (!root) return;
+    root.innerHTML = '';
+    if (!structure) return;
+
+    const h2 = document.createElement('h2');
+    h2.textContent = 'Residues';
+    root.appendChild(h2);
+
+    // Discover chains in the order they appear.
+    const chainsSeen = [];
+    const chainsIn = new Set();
+    for (const unit of structure.units) {
+      const { elements } = unit;
+      const h = unit.model.atomicHierarchy;
+      for (let i = 0, il = elements.length; i < il; i++) {
+        const cI = h.chainAtomSegments?.index?.[elements[i]];
+        if (cI == null) continue;
+        const id = h.chains.auth_asym_id.value(cI);
+        if (!chainsIn.has(id)) { chainsIn.add(id); chainsSeen.push(id); }
+      }
+    }
+
+    for (const chainId of chainsSeen) {
+      const residues = listResidues(chainId);
+      const group = document.createElement('div');
+      group.className = 'chain-group';
+
+      const title = document.createElement('h3');
+      title.textContent = `Chain ${chainId} (${residues.length})`;
+      group.appendChild(title);
+
+      const grid = document.createElement('div');
+      grid.className = 'chain-grid';
+      for (const { compId, seqNum } of residues) {
+        const chip = document.createElement('button');
+        chip.className = 'res-chip';
+        chip.textContent = `${compId}${seqNum}`;
+        chip.onclick = () => actions.clickResidue(compId, seqNum);
+        grid.appendChild(chip);
+      }
+      group.appendChild(grid);
+      root.appendChild(group);
+    }
+  }
+
+  function renderWalkButtons() {
+    const structure = getStructure();
+    if (!structure) return;
+    const root = $('walk-btns');
+    root.innerHTML = '';
+
+    // Discover chains present and their kind (protein vs DNA) from the
+    // first residue — cheap but reliable for this viewer.
+    const DNA_CODES = new Set(['DA','DC','DG','DT']);
+    const chainsSeen = new Map(); // id -> { kind, count }
+
+    for (const unit of structure.units) {
+      const { elements } = unit;
+      const h = unit.model.atomicHierarchy;
+      for (let i = 0, il = elements.length; i < il; i++) {
+        const eI = elements[i];
+        const cI = h.chainAtomSegments?.index?.[eI];
+        if (cI == null) continue;
+        const chainId = h.chains.auth_asym_id.value(cI);
+        if (chainsSeen.has(chainId)) continue;
+        const comp = h.atoms.label_comp_id.value(eI);
+        chainsSeen.set(chainId, { kind: DNA_CODES.has(comp) ? 'dna' : 'protein' });
+      }
+    }
+
+    for (const [chainId, { kind }] of [...chainsSeen.entries()].sort()) {
+      const residues = listResidues(chainId);
+      const btn = document.createElement('button');
+      btn.className = 'walk-btn';
+      const label = `Walk chain ${chainId}`;
+      btn.dataset.idleLabel = label;
+      btn.innerHTML = `${label}<span class="hint"> — ${residues.length} ${kind === 'dna' ? 'nucleosides' : 'residues'}</span>`;
+      btn.onclick = () => {
+        if (tourPlaying) { stopTour(); return; }
+        const tour = buildChainWalkTour(chainId, kind === 'dna' ? 'dna' : 'protein');
+        playTour(tour, btn, label, { autoSpin: true });
+      };
+      root.appendChild(btn);
+    }
+  }
+
+  function initTour() {
+    const btn = $('tour-btn');
+    btn.disabled = false;
+    btn.dataset.idleLabel = 'Start guided tour';
+    btn.onclick = () => tourPlaying ? stopTour() : playTour(TOUR, btn, 'Start guided tour');
+
+    const toggle = $('narrate-toggle');
+    toggle.onclick = () => {
+      narrateOn = !narrateOn;
+      toggle.textContent = `Narration: ${narrateOn ? 'on' : 'off'}`;
+      // If narration was mid-sentence, stop it rather than talking over the
+      // user after they muted.
+      if (!narrateOn && 'speechSynthesis' in window) speechSynthesis.cancel();
+    };
+
+    renderWalkButtons();
+
+    // Some browsers populate voices asynchronously; nudging this getter
+    // ensures the list is ready by the time we speak.
+    if ('speechSynthesis' in window) {
+      speechSynthesis.getVoices();
+      speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+    }
+  }
+
+  boot();
+</script>
+</body>
+</html>

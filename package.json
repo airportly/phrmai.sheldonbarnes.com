@@ -1,0 +1,15 @@
+{
+  "name": "phrmai-sheldonbarnes-com",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PHRMAI — pharma-AI interactive tools, on the road to HumanOS. Hosted at phrmai.sheldonbarnes.com.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev:genome-os": "cd genome-os && npm run dev",
+    "dev:protein-viewer": "cd protein-viewer && npx --yes http-server -p 5174 -c-1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
