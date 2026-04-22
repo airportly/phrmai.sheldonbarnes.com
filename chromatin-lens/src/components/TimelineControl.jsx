@@ -45,10 +45,10 @@ export default function TimelineControl({
   const containerStyle = isMobile
     ? {
         position: 'absolute',
-        top: 'calc(70px + env(safe-area-inset-top))',
+        top: 'calc(66px + env(safe-area-inset-top))',
         left: 10,
         right: 10,
-        padding: '10px 12px'
+        padding: '8px 10px'
       }
     : {
         position: 'absolute',
@@ -72,16 +72,18 @@ export default function TimelineControl({
       userSelect: 'none',
       zIndex: 1
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: isMobile ? 6 : 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: accentColor, fontWeight: 600 }}>
           {label}
         </span>
-        {sublabel && <span style={{ color: '#6b7280' }}>· {sublabel}</span>}
+        {sublabel && !isMobile && <span style={{ color: '#6b7280' }}>· {sublabel}</span>}
 
         {playable && (
           <>
             <div style={{ flex: 1 }} />
-            {onDetailChange && (
+            {/* Hide the instant/mid/full detail toggle on mobile — advanced
+                feature, saves 80+ px and a whole row of tap targets. */}
+            {onDetailChange && !isMobile && (
               <div style={{
                 display: 'inline-flex',
                 gap: 0,
@@ -115,7 +117,7 @@ export default function TimelineControl({
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', gap: isMobile ? 4 : 6 }}>
         {stages.map((s) => {
           const isActive = s.id === stageId;
           return (
@@ -124,15 +126,15 @@ export default function TimelineControl({
               onClick={() => onStageChange?.(s.id)}
               style={{
                 flex: 1,
-                minHeight: isMobile ? 44 : 'auto',
-                padding: isMobile ? '8px 6px' : '7px 8px',
+                minHeight: isMobile ? 36 : 'auto',
+                padding: isMobile ? '5px 4px' : '7px 8px',
                 borderRadius: 6,
                 background: isActive ? accentHighlightBg : 'rgba(255,255,255,0.04)',
                 border: `1px solid ${isActive ? accentHighlight : 'rgba(255,255,255,0.08)'}`,
                 color: isActive ? accentColor : '#cbd5e1',
                 cursor: 'pointer',
                 fontFamily: 'inherit',
-                fontSize: 12,
+                fontSize: isMobile ? 11 : 12,
                 fontWeight: isActive ? 700 : 500,
                 letterSpacing: 0.3,
                 textAlign: 'center',
@@ -141,16 +143,20 @@ export default function TimelineControl({
               aria-pressed={isActive}
             >
               <div>{s.label}</div>
-              <div style={{
-                fontSize: 9,
-                marginTop: 2,
-                color: isActive ? accentColor : '#6b7280',
-                opacity: isActive ? 0.85 : 1,
-                fontWeight: 500,
-                letterSpacing: 0.2
-              }}>
-                {s.timeframe}
-              </div>
+              {/* Timeframe subtitle is extra detail; skip on mobile to keep the
+                  button tight — the label alone is enough. */}
+              {!isMobile && (
+                <div style={{
+                  fontSize: 9,
+                  marginTop: 2,
+                  color: isActive ? accentColor : '#6b7280',
+                  opacity: isActive ? 0.85 : 1,
+                  fontWeight: 500,
+                  letterSpacing: 0.2
+                }}>
+                  {s.timeframe}
+                </div>
+              )}
             </button>
           );
         })}
@@ -160,17 +166,17 @@ export default function TimelineControl({
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          marginTop: 8,
-          padding: '4px 2px'
+          gap: 6,
+          marginTop: isMobile ? 6 : 8,
+          padding: isMobile ? '2px 0' : '4px 2px'
         }}>
           <button
             onClick={onPlayToggle}
             aria-label={playing ? 'Pause' : 'Play'}
             title={playing ? 'Pause' : (progress >= progressMax ? 'Replay from start' : 'Play')}
             style={{
-              width: isMobile ? 36 : 30,
-              height: isMobile ? 36 : 30,
+              width: isMobile ? 30 : 30,
+              height: isMobile ? 30 : 30,
               borderRadius: 6,
               border: `1px solid ${accentHighlight}`,
               background: accentHighlightBg,
@@ -179,10 +185,11 @@ export default function TimelineControl({
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0
+              flexShrink: 0,
+              padding: 0
             }}
           >
-            <PlayIcon playing={playing} size={isMobile ? 16 : 14} />
+            <PlayIcon playing={playing} size={isMobile ? 13 : 14} />
           </button>
           <input
             type="range"
@@ -204,10 +211,18 @@ export default function TimelineControl({
       )}
 
       <div style={{
-        marginTop: 8,
-        fontSize: 11,
+        marginTop: isMobile ? 6 : 8,
+        fontSize: isMobile ? 10 : 11,
         color: '#d1d5db',
-        lineHeight: 1.45
+        lineHeight: 1.4,
+        // Clamp to 2 lines on mobile with ellipsis so long summaries don't
+        // push the panel into the canvas.
+        ...(isMobile ? {
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden'
+        } : {})
       }}>
         {stage.summary}
       </div>

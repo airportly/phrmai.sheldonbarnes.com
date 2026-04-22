@@ -68,6 +68,8 @@ export default function AudioTourControl({
   const [voiceURI, setVoiceURI] = useState(null);
   const advanceTimerRef = useRef(null);
   const currentStepRef = useRef(null);
+  // Timers for in-step focus shifts — cleared on step change or stop.
+  const focusShiftTimersRef = useRef([]);
 
   useEffect(() => {
     if (voices.length && !voiceURI) {
@@ -89,6 +91,8 @@ export default function AudioTourControl({
       clearTimeout(advanceTimerRef.current);
       advanceTimerRef.current = null;
     }
+    focusShiftTimersRef.current.forEach((t) => clearTimeout(t));
+    focusShiftTimersRef.current = [];
   };
 
   const speakStep = (idx) => {
@@ -98,6 +102,18 @@ export default function AudioTourControl({
     if (step.state) applyState(step.state);
 
     cleanup();
+
+    // Schedule mid-step focus shifts so the scene pans to each element as
+    // the narration names it (e.g. "the pink blob is the nucleolus"...).
+    if (Array.isArray(step.focusShifts)) {
+      for (const shift of step.focusShifts) {
+        const timer = setTimeout(() => {
+          if (currentStepRef.current !== step) return;
+          if (shift.focus !== undefined) applyState({ focus: shift.focus });
+        }, Math.max(0, shift.atMs || 0));
+        focusShiftTimersRef.current.push(timer);
+      }
+    }
 
     const u = new SpeechSynthesisUtterance(step.narration);
     u.rate = 1.0;

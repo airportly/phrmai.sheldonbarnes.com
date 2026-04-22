@@ -23,20 +23,41 @@ function loopPoint(t) {
   ];
 }
 
+// CompartmentScene's pathPoint — kept in sync so we can pan the camera to
+// specific spots along the chromosome path.
+function compartmentPoint(t) {
+  return [
+    t * 9 - 4.5,
+    Math.sin(t * Math.PI * 2.5) * 1.2 + Math.cos(t * Math.PI * 5) * 0.2,
+    Math.cos(t * Math.PI * 1.8) * 0.7
+  ];
+}
+
 // Focus targets referenced by tour steps. Shape matches what setFocus()
 // expects: { scaleId, localPoint }. When applied, ScaleController smoothly
 // translates the scene so localPoint ends up at world origin — regardless
 // of zoom or autoRotate.
 const FOCUS = {
-  // Nucleus level — chr11 territory position (from CHROMOSOME_TERRITORIES)
+  // ---- Nucleus level ----
   chr11: { scaleId: 'nucleus', localPoint: [0.2, 0.1, 0.0] },
+  nucleolus: { scaleId: 'nucleus', localPoint: [-1.1, -1.0, 0.9] },
+  nucLad: { scaleId: 'nucleus', localPoint: [2.8, -0.6, 0.5] },
 
-  // TAD level — HBB TAD is in the middle, neighbor is offset left
+  // ---- Compartment level — specific segment midpoints ----
+  // Cumulative fractions computed from COMPARTMENT_SEGMENTS lengths.
+  compartmentAGold: { scaleId: 'compartment', localPoint: compartmentPoint(0.1524) },
+  compartmentBIndigo: { scaleId: 'compartment', localPoint: compartmentPoint(0.2476) },
+  compartmentHbbRed: { scaleId: 'compartment', localPoint: compartmentPoint(0.5667) },
+
+  // ---- TAD level ----
   tadHbb: { scaleId: 'tad', localPoint: [0, 0, 0] },
-  tadNeighbor: { scaleId: 'tad', localPoint: [-3.2, 0, 0] },
+  tadNeighborLeft: { scaleId: 'tad', localPoint: [-3.2, 0, 0] },
+  tadCtcfLeft: { scaleId: 'tad', localPoint: [-1.6, 0, 0] }, // red boundary between left+middle
 
-  // Loop level — positions along the teardrop curve
+  // ---- Loop level — positions along the teardrop curve ----
   loopLcr: { scaleId: 'loop', localPoint: loopPoint(0.02) },
+  loopCtcf1: { scaleId: 'loop', localPoint: loopPoint(0.05) },
+  loopCtcf2: { scaleId: 'loop', localPoint: loopPoint(0.95) },
   loopHbe1: { scaleId: 'loop', localPoint: loopPoint(0.145) },
   loopHbg2: { scaleId: 'loop', localPoint: loopPoint(0.375) },
   loopHbg1: { scaleId: 'loop', localPoint: loopPoint(0.475) },
@@ -44,10 +65,10 @@ const FOCUS = {
   loopHbb: { scaleId: 'loop', localPoint: loopPoint(0.825) },
   loopCohesin: { scaleId: 'loop', localPoint: [0, -0.5, 0] },
 
-  // Nucleosome level — central nucleosome (index 6 of 12)
+  // ---- Nucleosome level ----
   nucCentral: { scaleId: 'nucleosomes', localPoint: [0, Math.sin(6 * 0.6) * 0.15, Math.cos(6 * 0.4) * 0.12] },
 
-  // Helix / atomic — center on origin (already the natural center)
+  // ---- Helix / atomic ----
   origin: { localPoint: [0, 0, 0] }
 };
 
@@ -80,7 +101,12 @@ export const TOUR_STEPS = [
     id: 'nucleus',
     narration:
       "We're inside a human cell nucleus, about ten micrometers across. All 46 chromosomes live in here, each in its own spatial territory. The yellow one, now at center, is chromosome eleven — our home for the entire tour. The pink blob is the nucleolus, where ribosomes are made. The small green rings are lamina-associated domains — silenced chromatin regions pressed against the nuclear envelope.",
-    state: { ...RESET, zoom: midpoint('nucleus'), focus: FOCUS.chr11 }
+    state: { ...RESET, zoom: midpoint('nucleus'), focus: FOCUS.chr11 },
+    // Pan from chr11 → nucleolus (pink) → LAD (green) as each is mentioned.
+    focusShifts: [
+      { atMs: 17000, focus: FOCUS.nucleolus },
+      { atMs: 22000, focus: FOCUS.nucLad }
+    ]
   },
   {
     id: 'mitosis',
@@ -93,7 +119,13 @@ export const TOUR_STEPS = [
     id: 'compartment',
     narration:
       "Zooming into chromosome eleven, we see alternating A and B compartments. The gold regions are active euchromatin — gene-dense and transcribed. The indigo regions are inactive heterochromatin — gene-poor, often pressed against the nuclear lamina. The red sphere marks where the beta-globin locus lives, inside an active A compartment.",
-    state: { ...RESET, zoom: midpoint('compartment') }
+    state: { ...RESET, zoom: midpoint('compartment'), focus: FOCUS.compartmentAGold },
+    // Walk through each color as mentioned: gold (A) → indigo (B) → red HBB beacon.
+    focusShifts: [
+      { atMs: 4500, focus: FOCUS.compartmentAGold },
+      { atMs: 9000, focus: FOCUS.compartmentBIndigo },
+      { atMs: 16000, focus: FOCUS.compartmentHbbRed }
+    ]
   },
   {
     id: 'tad-hbb',
@@ -105,13 +137,21 @@ export const TOUR_STEPS = [
     id: 'tad-neighbor',
     narration:
       "Now look at the neighboring TAD. The red spheres between the TADs are CTCF boundary elements — insulators anchored by convergent CTCF sites. They stop regulatory contacts from crossing. A single boundary mutation can re-wire which enhancers reach which genes and cause disease.",
-    state: { ...RESET, zoom: midpoint('tad'), focus: FOCUS.tadNeighbor }
+    state: { ...RESET, zoom: midpoint('tad'), focus: FOCUS.tadNeighborLeft },
+    // After mentioning the neighbor, pan to the red CTCF boundary between them.
+    focusShifts: [
+      { atMs: 3500, focus: FOCUS.tadCtcfLeft }
+    ]
   },
   {
     id: 'loop-intro',
     narration:
       "Inside the TAD, we finally see an individual chromatin loop, about a hundred kilobases across. The purple sphere at the center is the Locus Control Region — a powerful enhancer. The yellow beam is its physical contact with the HBB gene. This contact is what turns HBB on.",
-    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult', focus: FOCUS.loopLcr }
+    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult', focus: FOCUS.loopLcr },
+    // After introducing the LCR, pan along the yellow contact beam to HBB.
+    focusShifts: [
+      { atMs: 12000, focus: FOCUS.loopHbb }
+    ]
   },
   {
     id: 'loop-embryonic',

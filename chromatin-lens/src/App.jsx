@@ -475,33 +475,18 @@ export default function App() {
         />
       )}
 
-      {/* Top overlays — all timeline/dynamics controls. Auto-hide during tour:
-          desktop reveals when the cursor enters the top 240 px; mobile hides
-          them entirely during tour (since there's no hover) and the user can
-          exit the tour to access them. */}
-      {!(isMobile && sidebarOpen) && (() => {
-        // Desktop reveals on cursor proximity; mobile has no cursor, so stays
-        // hidden for the duration of the tour.
-        const topAutoHidden = tourActive && !inTopPanel;
+      {/* Top overlays — all timeline/dynamics controls. While the tour is
+          playing, hide them entirely (they are not needed and visually
+          compete with the narration). User can exit the tour to use them. */}
+      {!(isMobile && sidebarOpen) && !tourActive && (() => {
+        // No longer auto-hide within a tour session — tour branch returns
+        // null before reaching here. Outside tour, always visible.
         const wrapperStyle = isMobile
-          ? {
-              display: tourActive ? 'block' : 'contents',
-              // On mobile during tour, wrap in a positioned container that
-              // slides the whole stack up out of view.
-              ...(tourActive ? {
-                position: 'absolute', top: 0, left: 0, right: 0,
-                zIndex: 3,
-                transform: topAutoHidden ? 'translateY(-110%)' : 'translateY(0)',
-                transition: 'transform 0.35s cubic-bezier(.2,.8,.2,1)',
-                pointerEvents: topAutoHidden ? 'none' : 'auto'
-              } : {})
-            }
+          ? { display: 'contents' }
           : {
               position: 'absolute', top: 0, left: 0, right: 0,
               zIndex: 3,
-              transform: topAutoHidden ? 'translateY(-110%)' : 'translateY(0)',
-              transition: 'transform 0.35s cubic-bezier(.2,.8,.2,1)',
-              pointerEvents: topAutoHidden ? 'none' : 'auto'
+              pointerEvents: 'auto'
             };
         return (
           <div style={wrapperStyle}>
