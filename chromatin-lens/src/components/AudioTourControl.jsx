@@ -168,6 +168,39 @@ export default function AudioTourControl({
     if (!active) cleanup();
   }, [active]);
 
+  // ----- Hoisted word-range / current-word computation -----
+  // Must live above any conditional early-return so the scrollIntoView
+  // useEffect below runs in the same order on every render (hooks rule).
+  const step = stepList[stepIdx] ?? null;
+
+  const wordRanges = (() => {
+    const ranges = [];
+    if (!step?.narration) return ranges;
+    const re = /\S+/g;
+    let m;
+    while ((m = re.exec(step.narration)) !== null) {
+      ranges.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+    }
+    return ranges;
+  })();
+
+  let currentWordIdx = -1;
+  if (spokenCharIndex >= 0) {
+    for (let i = 0; i < wordRanges.length; i++) {
+      if (wordRanges[i].start <= spokenCharIndex) currentWordIdx = i;
+      else break;
+    }
+  }
+
+  // Scroll the highlighted word into view. No-ops when ref is null.
+  useEffect(() => {
+    const el = currentWordRef.current;
+    if (!el) return;
+    try {
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    } catch { /* older browsers */ }
+  }, [currentWordIdx]);
+
   const start = () => {
     setStepIdx(0);
     onActiveChange(true);
@@ -225,41 +258,7 @@ export default function AudioTourControl({
   }
 
   // --------------- Active: compact mobile bar / full desktop bar -----------
-  const step = stepList[stepIdx];
   if (!step) return null;
-
-  // Pre-parse the narration into word ranges so we can highlight the
-  // currently-spoken word and auto-scroll it into view.
-  const wordRanges = (() => {
-    const ranges = [];
-    if (!step.narration) return ranges;
-    const re = /\S+/g;
-    let m;
-    while ((m = re.exec(step.narration)) !== null) {
-      ranges.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
-    }
-    return ranges;
-  })();
-
-  let currentWordIdx = -1;
-  if (spokenCharIndex >= 0) {
-    for (let i = 0; i < wordRanges.length; i++) {
-      if (wordRanges[i].start <= spokenCharIndex) currentWordIdx = i;
-      else break;
-    }
-  }
-
-  // Scroll the highlighted word into view whenever it changes.
-  useEffect(() => {
-    const el = currentWordRef.current;
-    if (!el) return;
-    // scrollIntoView with 'nearest' keeps horizontal position and only
-    // scrolls vertically when needed — avoids jumpy horizontal shifts.
-    try {
-      el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-    } catch { /* older browsers */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentWordIdx]);
 
   // Renders the narration as a list of spans, highlighting the current word.
   const renderTranscript = () => (
@@ -427,7 +426,12 @@ export default function AudioTourControl({
     );
   }
 
-  // --------------- Desktop: full narration bar ---------------
+  // --------------- Desktop: compact caption bar (mirrors mobile) ----------
+  // Previous desktop bar had a dedicated narration area + separate controls
+  // row + header row = ~200 px tall. That's unnecessary. New layout:
+  //   row 1: [play/pause 44×44]  [2-line transcript]  [voice ▾] [×]
+  //   row 2: [prev]  [progress dots]  [step N/M]  [next]
+  // Roughly 100 px total.
   return (
     <div style={{
       ...commonBar,
@@ -436,116 +440,107 @@ export default function AudioTourControl({
       left: 20,
       right: 360,
       maxWidth: 740,
-      padding: '12px 16px',
+      padding: '10px 14px',
       fontSize: 13
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#fde68a', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <IconHeadphones size={11} />
-          {label}
-        </span>
-        <span style={{ color: '#6b7280', fontSize: 11 }}>
-          Step {stepIdx + 1} of {stepList.length}
-        </span>
-        <div style={{ flex: 1 }} />
-        {voices.length > 0 && (
-          <select
-            value={voiceURI || ''}
-            onChange={(e) => setVoiceURI(e.target.value)}
-            style={{
-              fontSize: 10,
-              background: 'rgba(255,255,255,0.04)',
-              color: '#cbd5e1',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 4,
-              padding: '2px 4px',
-              maxWidth: 140,
-              fontFamily: 'inherit'
-            }}
-            title="Voice"
-          >
-            {voices.map(v => (
-              <option key={v.voiceURI} value={v.voiceURI}>
-                {v.name} {v.lang ? `(${v.lang})` : ''}
-              </option>
-            ))}
-          </select>
-        )}
-        <button
-          onClick={stop}
-          title="End tour"
-          style={{
-            width: 26, height: 26,
-            border: '1px solid rgba(255,255,255,0.15)',
-            background: 'rgba(255,255,255,0.04)',
-            color: '#cbd5e1',
-            borderRadius: 4,
-            cursor: 'pointer',
-            fontSize: 14, padding: 0,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
-          }}
-          aria-label="End tour"
-        >×</button>
-      </div>
-
-      <div
-        ref={captionScrollRef}
-        style={{
-          fontSize: 13,
-          color: '#e5e7eb',
-          lineHeight: 1.55,
-          minHeight: 50,
-          maxHeight: 120,
-          overflow: 'auto',
-          marginBottom: 10
-        }}
-      >
-        {renderTranscript()}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button
-          onClick={goPrev}
-          disabled={stepIdx === 0}
-          title="Previous step"
-          style={{
-            width: 36, height: 36, borderRadius: 6,
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            color: stepIdx === 0 ? '#4b5563' : '#cbd5e1',
-            cursor: stepIdx === 0 ? 'not-allowed' : 'pointer',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
-          }}
-        ><IconPrev size={14} /></button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button
           onClick={togglePause}
           title={paused ? 'Resume' : 'Pause'}
+          aria-label={paused ? 'Resume' : 'Pause'}
           style={{
-            width: 42, height: 36, borderRadius: 6,
+            width: 44, height: 44, borderRadius: 8,
             background: 'rgba(255, 217, 61, 0.18)',
             border: '1px solid rgba(255, 217, 61, 0.55)',
             color: '#fde68a',
             cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, padding: 0
           }}
         >
           {paused ? <IconPlay size={16} /> : <IconPause size={16} />}
         </button>
-        <button
-          onClick={goNext}
-          disabled={stepIdx >= stepList.length - 1}
-          title="Next step"
+
+        <div
+          ref={captionScrollRef}
           style={{
-            width: 36, height: 36, borderRadius: 6,
+            flex: 1,
+            fontSize: 13,
+            lineHeight: 1.45,
+            color: '#e5e7eb',
+            maxHeight: '2.9em',
+            minHeight: '2.9em',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none'
+          }}
+        >
+          {renderTranscript()}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end' }}>
+          <button
+            onClick={stop}
+            title="End tour"
+            aria-label="End tour"
+            style={{
+              width: 26, height: 26,
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: 'rgba(255,255,255,0.04)',
+              color: '#cbd5e1',
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontSize: 14, padding: 0, lineHeight: 1,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+            }}
+          >×</button>
+          {voices.length > 0 && (
+            <select
+              value={voiceURI || ''}
+              onChange={(e) => setVoiceURI(e.target.value)}
+              style={{
+                fontSize: 9,
+                background: 'rgba(255,255,255,0.04)',
+                color: '#cbd5e1',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 4,
+                padding: '2px 4px',
+                maxWidth: 120,
+                fontFamily: 'inherit'
+              }}
+              title="Voice"
+            >
+              {voices.map(v => (
+                <option key={v.voiceURI} value={v.voiceURI}>
+                  {v.name.substring(0, 14)}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#fde68a', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <IconHeadphones size={10} />
+          {label}
+        </span>
+        <button
+          onClick={goPrev}
+          disabled={stepIdx === 0}
+          aria-label="Previous step"
+          style={{
+            width: 30, height: 22, borderRadius: 4,
             background: 'rgba(255,255,255,0.04)',
             border: '1px solid rgba(255,255,255,0.12)',
-            color: stepIdx >= stepList.length - 1 ? '#4b5563' : '#cbd5e1',
-            cursor: stepIdx >= stepList.length - 1 ? 'not-allowed' : 'pointer',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+            color: stepIdx === 0 ? '#4b5563' : '#cbd5e1',
+            cursor: stepIdx === 0 ? 'not-allowed' : 'pointer',
+            padding: 0,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
           }}
-        ><IconNext size={14} /></button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, flex: 1, marginLeft: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
+        ><IconPrev size={11} /></button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, flex: 1, flexWrap: 'nowrap', overflow: 'hidden' }}>
           {stepList.map((s, i) => (
             <button
               key={s.id}
@@ -554,7 +549,7 @@ export default function AudioTourControl({
               style={{
                 flex: 1,
                 minWidth: 8,
-                height: 4,
+                height: 3,
                 borderRadius: 2,
                 border: 'none',
                 cursor: 'pointer',
@@ -566,6 +561,23 @@ export default function AudioTourControl({
             />
           ))}
         </div>
+        <span style={{ fontSize: 10, color: '#9ca3af', fontVariantNumeric: 'tabular-nums', letterSpacing: 0.3, minWidth: 34, textAlign: 'center' }}>
+          {stepIdx + 1}/{stepList.length}
+        </span>
+        <button
+          onClick={goNext}
+          disabled={stepIdx >= stepList.length - 1}
+          aria-label="Next step"
+          style={{
+            width: 30, height: 22, borderRadius: 4,
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            color: stepIdx >= stepList.length - 1 ? '#4b5563' : '#cbd5e1',
+            cursor: stepIdx >= stepList.length - 1 ? 'not-allowed' : 'pointer',
+            padding: 0,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}
+        ><IconNext size={11} /></button>
       </div>
     </div>
   );
