@@ -136,9 +136,9 @@ export default function App() {
   const altForm = ALT_FORMS.find(f => f.id === altFormId);
   // Audio tour — driven by AudioTourControl; may set any of the above states.
   const [tourActive, setTourActive] = useState(false);
-  // Snapshot of the user's lock state just before the tour started — restored
-  // on exit so we don't permanently overwrite their choice.
-  const preTourLockRef = useRef(null);
+  // Snapshot of the user's lock state just before an "engagement" (tour or
+  // animation) started — restored on exit so we don't overwrite their choice.
+  const preEngagementLockRef = useRef(null);
   // Which steps the tour plays. Default is the full tour; a level tour swaps
   // in a filtered list via stepsForScale().
   const [tourSteps, setTourSteps] = useState(TOUR_STEPS);
@@ -266,32 +266,51 @@ export default function App() {
   const containerRef = useRef();
   const isMobile = useIsMobile();
 
-  // Lock zoom to the current level while the tour plays so users can't
-  // accidentally wheel/pinch out of whatever level is being narrated. Saves
-  // the user's pre-tour lock (including "no lock") and restores it on exit.
-  // Re-locks whenever the tour navigates to a different scale.
+  // "Engagement lock": any tour or playing animation force-locks the user to
+  // the relevant level so they can't accidentally wheel/pinch out of the
+  // scene that's being narrated or animated. Also snaps the zoom to that
+  // level (and its default natural-size zoom on mobile) if the user isn't
+  // already there. The pre-engagement lock is saved and restored on exit.
   useEffect(() => {
-    if (tourActive) {
-      // Snapshot the user's lock state on first entry — use a sentinel so we
-      // can distinguish "no prior lock" from "haven't snapshotted yet".
-      if (preTourLockRef.current === undefined || preTourLockRef.current === null) {
-        preTourLockRef.current = { prev: lockedScaleId };
+    // Figure out which scale the user should be locked to, if any:
+    //   - Tour: whatever level the tour is currently on
+    //   - Mitosis animation: nucleus level
+    //   - Cohesin extrusion or transcription: loop level
+    //   - Replication fork: helix level
+    let engagementScale = null;
+    if (tourActive) engagementScale = getActiveScale(zoom).id;
+    else if (mitosisPlaying) engagementScale = 'nucleus';
+    else if (extrusionPlaying || transcribing) engagementScale = 'loop';
+    else if (replicationPlaying) engagementScale = 'helix';
+
+    if (engagementScale) {
+      // Snapshot the user's manual lock state on first engagement entry.
+      if (preEngagementLockRef.current === null) {
+        preEngagementLockRef.current = { prev: lockedScaleId };
       }
-      const scale = getActiveScale(zoom);
-      if (lockedScaleId !== scale.id) setLockedScaleId(scale.id);
-      // Also push zoom past the fade band so no adjacent scene bleeds in.
+      const scale = SCALES.find((s) => s.id === engagementScale);
+      if (!scale) return;
+      if (lockedScaleId !== engagementScale) setLockedScaleId(engagementScale);
+      // Push zoom past the fade band so neighbors can't bleed in.
       const pad = SCALE_FADE_WIDTH + 0.002;
       const lo = scale.zoomMin + pad;
       const hi = scale.zoomMax - pad;
       if (zoom < lo || zoom > hi) {
-        setZoom(Math.max(lo, Math.min(hi, zoom)));
+        // Out of range entirely (different level) → snap to the default
+        // zoom for this device. Still within the level but inside the fade
+        // band → just clamp.
+        const target = (zoom < scale.zoomMin || zoom > scale.zoomMax)
+          ? defaultZoomFor(scale, isMobile)
+          : Math.max(lo, Math.min(hi, zoom));
+        setZoom(target);
       }
-    } else if (preTourLockRef.current && typeof preTourLockRef.current === 'object') {
-      setLockedScaleId(preTourLockRef.current.prev ?? null);
-      preTourLockRef.current = null;
+    } else if (preEngagementLockRef.current) {
+      // Nothing running → restore the user's pre-engagement lock (or null).
+      setLockedScaleId(preEngagementLockRef.current.prev ?? null);
+      preEngagementLockRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tourActive, zoom]);
+  }, [tourActive, mitosisPlaying, extrusionPlaying, transcribing, replicationPlaying, zoom]);
 
   // Clamp zoom to the locked scale, or [0,1] otherwise. When locked, pad
   // the clamp by the full fade-out width so adjacent scenes can't bleed in
