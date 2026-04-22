@@ -68,6 +68,10 @@ export default function AudioTourControl({
   const [voiceURI, setVoiceURI] = useState(null);
   const advanceTimerRef = useRef(null);
   const currentStepRef = useRef(null);
+  // Active utterance — we flag it cancelled on cleanup so its onend handler
+  // doesn't auto-advance to the next step when the cancellation itself fires
+  // an "end" event.
+  const utteranceRef = useRef(null);
   // Timers for in-step focus shifts — cleared on step change or stop.
   const focusShiftTimersRef = useRef([]);
   // Char-index that SpeechSynthesis last reported as the start of a word.
@@ -91,6 +95,12 @@ export default function AudioTourControl({
   }, [stepList]);
 
   const cleanup = () => {
+    // Tag the active utterance as cancelled BEFORE calling cancel() so its
+    // onend handler (fired by the cancellation) doesn't advance the tour.
+    if (utteranceRef.current) {
+      utteranceRef.current._cancelled = true;
+      utteranceRef.current = null;
+    }
     try { window.speechSynthesis.cancel(); } catch (e) { /* noop */ }
     if (advanceTimerRef.current) {
       clearTimeout(advanceTimerRef.current);
@@ -103,6 +113,19 @@ export default function AudioTourControl({
   const speakStep = (idx) => {
     const step = stepList[idx];
     if (!step) return;
+    // Already speaking this exact step? Don't restart from the top just
+    // because something else triggered a re-render of the parent. This
+    // protects against mid-tour user interactions (clicking an element,
+    // opening/closing the info card, sidebar toggles, etc.) accidentally
+    // re-speaking the current step.
+    if (
+      currentStepRef.current === step &&
+      utteranceRef.current &&
+      !utteranceRef.current._cancelled &&
+      (window.speechSynthesis.speaking || window.speechSynthesis.pending)
+    ) {
+      return;
+    }
     currentStepRef.current = step;
     if (step.state) applyState(step.state);
 
@@ -124,10 +147,10 @@ export default function AudioTourControl({
     setSpokenCharIndex(-1);
 
     const u = new SpeechSynthesisUtterance(step.narration);
+    u._cancelled = false;
+    utteranceRef.current = u;
     u.onboundary = (evt) => {
       if (currentStepRef.current !== step) return;
-      // Chrome fires 'word' on word starts; Safari often doesn't populate
-      // name, but charIndex is correct. Accept either.
       if (!evt.name || evt.name === 'word') {
         setSpokenCharIndex(evt.charIndex);
       }
@@ -140,6 +163,9 @@ export default function AudioTourControl({
       if (v) u.voice = v;
     }
     u.onend = () => {
+      // Ignore end events that fire because we cancelled speech — otherwise
+      // the tour "auto-advances" (or re-speaks) on every cancel.
+      if (u._cancelled) return;
       if (currentStepRef.current !== step) return;
       const wait = step.pauseAfterMs || 0;
       advanceTimerRef.current = setTimeout(() => {
