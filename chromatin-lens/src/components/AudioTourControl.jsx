@@ -17,7 +17,6 @@ function useVoices() {
 
 function pickDefaultVoice(voices) {
   if (!voices.length) return null;
-  // Prefer a high-quality English voice if available
   const byName = (needle) => voices.find(v => v.name && v.name.toLowerCase().includes(needle));
   return (
     byName('samantha') ||
@@ -30,7 +29,6 @@ function pickDefaultVoice(voices) {
   );
 }
 
-// Small icons
 function IconPlay({ size = 14 }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><polygon points="7,5 7,19 19,12" /></svg>;
 }
@@ -52,7 +50,18 @@ function IconHeadphones({ size = 14 }) {
   );
 }
 
-export default function AudioTourControl({ applyState, active, onActiveChange, isMobile, tourBottomOffset }) {
+export default function AudioTourControl({
+  applyState,
+  active,
+  onActiveChange,
+  isMobile,
+  // Which steps to play. Defaults to the full TOUR_STEPS; callers can pass a
+  // filtered list to run a subset (e.g. just the current level).
+  steps,
+  // Short label shown in the active bar header (e.g. "Audio tour" or "Tour · Loop").
+  label = 'Audio tour'
+}) {
+  const stepList = steps && steps.length > 0 ? steps : TOUR_STEPS;
   const [stepIdx, setStepIdx] = useState(0);
   const [paused, setPaused] = useState(false);
   const voices = useVoices();
@@ -67,6 +76,13 @@ export default function AudioTourControl({ applyState, active, onActiveChange, i
     }
   }, [voices, voiceURI]);
 
+  // If the list of steps we're driving changes (e.g. full → level tour),
+  // reset the step index so we start at the top of the new list.
+  useEffect(() => {
+    setStepIdx(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepList]);
+
   const cleanup = () => {
     try { window.speechSynthesis.cancel(); } catch (e) { /* noop */ }
     if (advanceTimerRef.current) {
@@ -76,7 +92,7 @@ export default function AudioTourControl({ applyState, active, onActiveChange, i
   };
 
   const speakStep = (idx) => {
-    const step = TOUR_STEPS[idx];
+    const step = stepList[idx];
     if (!step) return;
     currentStepRef.current = step;
     if (step.state) applyState(step.state);
@@ -92,13 +108,11 @@ export default function AudioTourControl({ applyState, active, onActiveChange, i
       if (v) u.voice = v;
     }
     u.onend = () => {
-      // If user paused/skipped/stopped, ignore
       if (currentStepRef.current !== step) return;
       const wait = step.pauseAfterMs || 0;
       advanceTimerRef.current = setTimeout(() => {
         setStepIdx((cur) => {
-          if (cur >= TOUR_STEPS.length - 1) {
-            // End of tour
+          if (cur >= stepList.length - 1) {
             onActiveChange(false);
             return 0;
           }
@@ -110,16 +124,14 @@ export default function AudioTourControl({ applyState, active, onActiveChange, i
     window.speechSynthesis.speak(u);
   };
 
-  // When active step changes while tour is active, play it.
   useEffect(() => {
     if (!active) return;
     setPaused(false);
     speakStep(stepIdx);
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, stepIdx]);
+  }, [active, stepIdx, stepList]);
 
-  // When tour deactivates, cancel speech.
   useEffect(() => {
     if (!active) cleanup();
   }, [active]);
@@ -143,7 +155,7 @@ export default function AudioTourControl({ applyState, active, onActiveChange, i
     }
   };
   const goPrev = () => setStepIdx((i) => Math.max(0, i - 1));
-  const goNext = () => setStepIdx((i) => Math.min(TOUR_STEPS.length - 1, i + 1));
+  const goNext = () => setStepIdx((i) => Math.min(stepList.length - 1, i + 1));
 
   // --------------- Inactive: small "Take tour" button --------------------
   if (!active) {
@@ -176,7 +188,8 @@ export default function AudioTourControl({ applyState, active, onActiveChange, i
   }
 
   // --------------- Active: bottom bar with narration + controls ----------
-  const step = TOUR_STEPS[stepIdx];
+  const step = stepList[stepIdx];
+  if (!step) return null;
   const activeBarStyle = isMobile
     ? {
         position: 'absolute',
@@ -211,10 +224,10 @@ export default function AudioTourControl({ applyState, active, onActiveChange, i
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#fde68a', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <IconHeadphones size={11} />
-          Audio tour
+          {label}
         </span>
         <span style={{ color: '#6b7280', fontSize: 11 }}>
-          Step {stepIdx + 1} of {TOUR_STEPS.length}
+          Step {stepIdx + 1} of {stepList.length}
         </span>
         <div style={{ flex: 1 }} />
         {voices.length > 0 && (
@@ -305,23 +318,22 @@ export default function AudioTourControl({ applyState, active, onActiveChange, i
         </button>
         <button
           onClick={goNext}
-          disabled={stepIdx >= TOUR_STEPS.length - 1}
+          disabled={stepIdx >= stepList.length - 1}
           title="Next step"
           style={{
             width: 36, height: 36, borderRadius: 6,
             background: 'rgba(255,255,255,0.04)',
             border: '1px solid rgba(255,255,255,0.12)',
-            color: stepIdx >= TOUR_STEPS.length - 1 ? '#4b5563' : '#cbd5e1',
-            cursor: stepIdx >= TOUR_STEPS.length - 1 ? 'not-allowed' : 'pointer',
+            color: stepIdx >= stepList.length - 1 ? '#4b5563' : '#cbd5e1',
+            cursor: stepIdx >= stepList.length - 1 ? 'not-allowed' : 'pointer',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
           }}
         >
           <IconNext size={14} />
         </button>
 
-        {/* Progress dots */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 3, flex: 1, marginLeft: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
-          {TOUR_STEPS.map((s, i) => (
+          {stepList.map((s, i) => (
             <button
               key={s.id}
               onClick={() => setStepIdx(i)}

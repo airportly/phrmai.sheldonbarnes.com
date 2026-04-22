@@ -150,3 +150,34 @@ export const TOUR_STEPS = [
     state: { ...RESET, zoom: midpoint('nucleus') }
   }
 ];
+
+// Which scale each step belongs to. Null = meta step (intro/conclusion) —
+// not included in per-level tours.
+const STEP_SCALE = {
+  'intro': null,
+  'nucleus': 'nucleus',
+  'mitosis': 'nucleus',
+  'compartment': 'compartment',
+  'tad': 'tad',
+  'loop-intro': 'loop',
+  'loop-embryonic': 'loop',
+  'loop-fetal': 'loop',
+  'loop-adult': 'loop',
+  'loop-extrusion': 'loop',
+  'loop-transcription': 'loop',
+  'fiber': 'fiber',
+  'nucleosomes-intro': 'nucleosomes',
+  'nucleosomes-k27ac': 'nucleosomes',
+  'nucleosomes-k27me3': 'nucleosomes',
+  'helix-intro': 'helix',
+  'helix-replication': 'helix',
+  'helix-g4': 'helix',
+  'atomic': 'atomic',
+  'conclusion': null,
+};
+
+// Returns a curated subset of tour steps for a given scale id — used when
+// the user requests a tour of just the level they're currently viewing.
+export function stepsForScale(scaleId) {
+  return TOUR_STEPS.filter((s) => STEP_SCALE[s.id] === scaleId);
+}

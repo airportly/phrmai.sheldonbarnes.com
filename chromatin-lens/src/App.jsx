@@ -9,7 +9,20 @@ import LoopDynamicsControl from './components/LoopDynamicsControl';
 import HistoneMarksControl from './components/HistoneMarksControl';
 import DnaDynamicsControl from './components/DnaDynamicsControl';
 import AudioTourControl from './components/AudioTourControl';
-import { SCALES, DEVELOPMENTAL_STAGES, CELL_CYCLE_STAGES, HISTONE_MARKS, ALT_FORMS } from './data/locus';
+import { SCALES, DEVELOPMENTAL_STAGES, CELL_CYCLE_STAGES, HISTONE_MARKS, ALT_FORMS, INFO } from './data/locus';
+import { TOUR_STEPS, stepsForScale } from './data/tour';
+
+// Short display name per scale — used for level-tour label text.
+const SHORT_SCALE_NAME = {
+  nucleus: 'Nucleus',
+  compartment: 'Compartments',
+  tad: 'TAD',
+  loop: 'Loop',
+  fiber: '30-nm fiber',
+  nucleosomes: 'Nucleosomes',
+  helix: 'Helix',
+  atomic: 'Atomic'
+};
 
 function scaleMidpoint(scale) {
   return (scale.zoomMin + scale.zoomMax) / 2;
@@ -104,6 +117,38 @@ export default function App() {
   const altForm = ALT_FORMS.find(f => f.id === altFormId);
   // Audio tour — driven by AudioTourControl; may set any of the above states.
   const [tourActive, setTourActive] = useState(false);
+  // Which steps the tour plays. Default is the full tour; a level tour swaps
+  // in a filtered list via stepsForScale().
+  const [tourSteps, setTourSteps] = useState(TOUR_STEPS);
+  const [tourLabel, setTourLabel] = useState('Audio tour');
+
+  // Speak the name of any element the user clicks (short TTS chirp with
+  // just the title, not the full card body). User-toggleable and persisted.
+  const [voiceEnabled, setVoiceEnabled] = useState(() => {
+    try { return localStorage.getItem('cl-voice-names') !== 'off'; }
+    catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('cl-voice-names', voiceEnabled ? 'on' : 'off'); } catch {}
+  }, [voiceEnabled]);
+
+  // Auto-hide during tour: edge-proximity reveals for sidebar + top overlays.
+  const [edgeNearRight, setEdgeNearRight] = useState(false);
+  const [edgeNearTop, setEdgeNearTop] = useState(false);
+  useEffect(() => {
+    if (!tourActive || isMobile) {
+      setEdgeNearRight(false);
+      setEdgeNearTop(false);
+      return;
+    }
+    const handler = (e) => {
+      setEdgeNearRight(e.clientX > window.innerWidth - 48);
+      setEdgeNearTop(e.clientY < 72);
+    };
+    window.addEventListener('mousemove', handler);
+    return () => window.removeEventListener('mousemove', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourActive]);
 
   // Apply a partial state snapshot — used by the tour to advance through steps.
   const applyTourState = (s) => {
@@ -192,10 +237,41 @@ export default function App() {
     return Math.max(0, Math.min(1, next));
   };
 
+  // Speak just the title of a clicked element (e.g. "HBB — β-globin").
+  // Suppressed while the audio tour is running (would collide with narration).
+  const speakElementName = (id) => {
+    if (tourActive || !voiceEnabled) return;
+    const info = INFO[id];
+    if (!info?.title) return;
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(info.title);
+      u.rate = 1.0;
+      u.volume = 0.9;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* noop */ }
+  };
+
   const handleSelect = (id, newFocus) => {
     setSelectedInfo(id);
     if (newFocus) setFocus(newFocus);
     if (isMobile) setSidebarOpen(true);
+    speakElementName(id);
+  };
+
+  const startFullTour = () => {
+    setTourSteps(TOUR_STEPS);
+    setTourLabel('Audio tour');
+    setTourActive(true);
+  };
+
+  const startLevelTour = () => {
+    const scale = getActiveScale(zoom);
+    const filtered = stepsForScale(scale.id);
+    if (filtered.length === 0) return;
+    setTourSteps(filtered);
+    setTourLabel(`Tour · ${SHORT_SCALE_NAME[scale.id] || scale.id}`);
+    setTourActive(true);
   };
 
   const clearSelection = () => {
@@ -339,103 +415,190 @@ export default function App() {
         />
       </Canvas>
 
-      <Sidebar
-        zoom={zoom}
-        selectedInfo={selectedInfo}
-        onCloseInfo={clearSelection}
-        lockedScaleId={lockedScaleId}
-        onJump={jumpToScale}
-        isMobile={isMobile}
-        open={sidebarOpen}
-        onOpen={() => setSidebarOpen(true)}
-        onClose={() => setSidebarOpen(false)}
-      />
+      {/* Sidebar — auto-hides during a tour unless the user hovers the right
+          edge OR has clicked an element to read about. Slides off-screen. */}
+      {(() => {
+        const sidebarAutoHidden = tourActive && !isMobile && !edgeNearRight && !selectedInfo;
+        return (
+          <div style={{
+            position: 'absolute', top: 0, right: 0,
+            width: isMobile ? '100%' : 340,
+            height: '100dvh',
+            zIndex: 4,
+            transform: sidebarAutoHidden ? 'translateX(100%)' : 'translateX(0)',
+            transition: 'transform 0.35s cubic-bezier(.2,.8,.2,1)',
+            pointerEvents: sidebarAutoHidden ? 'none' : 'auto'
+          }}>
+            <Sidebar
+              zoom={zoom}
+              selectedInfo={selectedInfo}
+              onCloseInfo={clearSelection}
+              lockedScaleId={lockedScaleId}
+              onJump={jumpToScale}
+              isMobile={isMobile}
+              open={sidebarOpen}
+              onOpen={() => setSidebarOpen(true)}
+              onClose={() => setSidebarOpen(false)}
+            />
+          </div>
+        );
+      })()}
+
       {!(isMobile && sidebarOpen) && !tourActive && (
         <ScaleHint
           zoom={zoom}
           onJump={jumpToScale}
           lockedScaleId={lockedScaleId}
           onToggleLock={toggleLock}
+          onTourLevel={startLevelTour}
           isMobile={isMobile}
         />
       )}
+
+      {/* Top overlays — all timeline/dynamics controls. Auto-hide during
+          tour; reveal on cursor proximity to the top edge. */}
+      {!(isMobile && sidebarOpen) && (() => {
+        const topAutoHidden = tourActive && !isMobile && !edgeNearTop;
+        return (
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0,
+            zIndex: 3,
+            transform: topAutoHidden ? 'translateY(-110%)' : 'translateY(0)',
+            transition: 'transform 0.35s cubic-bezier(.2,.8,.2,1)',
+            pointerEvents: topAutoHidden ? 'none' : 'auto'
+          }}>
+            <TimelineControl
+              zoom={zoom}
+              visibleOnScaleId="loop"
+              stages={DEVELOPMENTAL_STAGES}
+              stageId={stageId}
+              onStageChange={setStageId}
+              label="Developmental time"
+              sublabel="globin switch"
+              isMobile={isMobile}
+            />
+            <LoopDynamicsControl
+              zoom={zoom}
+              extrusionProgress={extrusionProgress}
+              extrusionPlaying={extrusionPlaying}
+              onExtrusionPlayToggle={() => setExtrusionPlaying(p => !p)}
+              onExtrusionChange={(v) => { setExtrusionPlaying(false); setExtrusionProgress(v); }}
+              transcribing={transcribing}
+              onTranscribeToggle={() => setTranscribing(t => !t)}
+              isMobile={isMobile}
+            />
+            <HistoneMarksControl
+              zoom={zoom}
+              markId={histoneMarkId}
+              onMarkChange={setHistoneMarkId}
+              isMobile={isMobile}
+            />
+            <DnaDynamicsControl
+              zoom={zoom}
+              replicationProgress={replicationProgress}
+              replicationPlaying={replicationPlaying}
+              onReplicationPlayToggle={() => setReplicationPlaying(p => !p)}
+              onReplicationChange={(v) => { setReplicationPlaying(false); setReplicationProgress(v); }}
+              altFormId={altFormId}
+              onAltFormChange={setAltFormId}
+              isMobile={isMobile}
+            />
+            <TimelineControl
+              zoom={zoom}
+              visibleOnScaleId="nucleus"
+              stages={CELL_CYCLE_STAGES}
+              stageId={cellCycleStageId}
+              onStageChange={onMitosisStageSelect}
+              label="Cell cycle"
+              sublabel="mitosis"
+              accentColor="#93c5fd"
+              accentBorder="rgba(147, 197, 253, 0.30)"
+              accentHighlight="rgba(147, 197, 253, 0.55)"
+              accentHighlightBg="rgba(147, 197, 253, 0.14)"
+              isMobile={isMobile}
+              playable
+              playing={mitosisPlaying}
+              onPlayToggle={() => {
+                setMitosisPlaying((p) => {
+                  if (!p && mitosisProgress >= 3) setMitosisProgress(0);
+                  return !p;
+                });
+              }}
+              progress={mitosisProgress}
+              onProgressChange={(v) => {
+                setMitosisPlaying(false);
+                setMitosisProgress(v);
+              }}
+              progressMax={3}
+              detailLevel={mitosisDetail}
+              onDetailChange={setMitosisDetail}
+            />
+          </div>
+        );
+      })()}
+
+      {/* Audio tour controls — always rendered so the "Take the tour"
+          button remains visible when the tour is inactive. */}
       {!(isMobile && sidebarOpen) && (
         <AudioTourControl
           applyState={applyTourState}
           active={tourActive}
-          onActiveChange={setTourActive}
+          onActiveChange={(v) => {
+            // When activating externally, leave tourSteps/tourLabel as-is.
+            // When the user clicks the inactive button, kick off a full tour.
+            if (v && !tourActive) startFullTour();
+            else setTourActive(v);
+          }}
+          steps={tourSteps}
+          label={tourLabel}
           isMobile={isMobile}
         />
       )}
-      {!(isMobile && sidebarOpen) && (
-        <>
-          <TimelineControl
-            zoom={zoom}
-            visibleOnScaleId="loop"
-            stages={DEVELOPMENTAL_STAGES}
-            stageId={stageId}
-            onStageChange={setStageId}
-            label="Developmental time"
-            sublabel="globin switch"
-            isMobile={isMobile}
-          />
-          <LoopDynamicsControl
-            zoom={zoom}
-            extrusionProgress={extrusionProgress}
-            extrusionPlaying={extrusionPlaying}
-            onExtrusionPlayToggle={() => setExtrusionPlaying(p => !p)}
-            onExtrusionChange={(v) => { setExtrusionPlaying(false); setExtrusionProgress(v); }}
-            transcribing={transcribing}
-            onTranscribeToggle={() => setTranscribing(t => !t)}
-            isMobile={isMobile}
-          />
-          <HistoneMarksControl
-            zoom={zoom}
-            markId={histoneMarkId}
-            onMarkChange={setHistoneMarkId}
-            isMobile={isMobile}
-          />
-          <DnaDynamicsControl
-            zoom={zoom}
-            replicationProgress={replicationProgress}
-            replicationPlaying={replicationPlaying}
-            onReplicationPlayToggle={() => setReplicationPlaying(p => !p)}
-            onReplicationChange={(v) => { setReplicationPlaying(false); setReplicationProgress(v); }}
-            altFormId={altFormId}
-            onAltFormChange={setAltFormId}
-            isMobile={isMobile}
-          />
-          <TimelineControl
-            zoom={zoom}
-            visibleOnScaleId="nucleus"
-            stages={CELL_CYCLE_STAGES}
-            stageId={cellCycleStageId}
-            onStageChange={onMitosisStageSelect}
-            label="Cell cycle"
-            sublabel="mitosis"
-            accentColor="#93c5fd"
-            accentBorder="rgba(147, 197, 253, 0.30)"
-            accentHighlight="rgba(147, 197, 253, 0.55)"
-            accentHighlightBg="rgba(147, 197, 253, 0.14)"
-            isMobile={isMobile}
-            playable
-            playing={mitosisPlaying}
-            onPlayToggle={() => {
-              setMitosisPlaying((p) => {
-                if (!p && mitosisProgress >= 3) setMitosisProgress(0); // rewind if at end
-                return !p;
-              });
-            }}
-            progress={mitosisProgress}
-            onProgressChange={(v) => {
-              setMitosisPlaying(false);
-              setMitosisProgress(v);
-            }}
-            progressMax={3}
-            detailLevel={mitosisDetail}
-            onDetailChange={setMitosisDetail}
-          />
-        </>
+
+      {/* Voice mute toggle — small icon next to the Take-the-tour button.
+          Only shown when a tour isn't playing (during tour, muting element
+          names is automatic anyway). */}
+      {!tourActive && !(isMobile && sidebarOpen) && (
+        <button
+          onClick={() => {
+            setVoiceEnabled(v => !v);
+            try { window.speechSynthesis.cancel(); } catch {}
+          }}
+          title={voiceEnabled ? 'Mute element names' : 'Unmute element names'}
+          aria-label={voiceEnabled ? 'Mute element names' : 'Unmute element names'}
+          style={{
+            position: 'absolute',
+            top: isMobile ? 'calc(10px + env(safe-area-inset-top))' : 20,
+            right: isMobile ? 10 : 360,
+            zIndex: 3,
+            width: 34, height: 34,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            padding: 0,
+            color: voiceEnabled ? '#cbd5e1' : '#475569',
+            background: voiceEnabled ? 'rgba(255,255,255,0.06)' : 'rgba(71, 85, 105, 0.14)',
+            border: `1px solid ${voiceEnabled ? 'rgba(255,255,255,0.15)' : 'rgba(71,85,105,0.45)'}`,
+            borderRadius: 6,
+            cursor: 'pointer',
+            backdropFilter: 'blur(4px)',
+            // Position to the LEFT of "Take the tour" (desktop) or to its left on mobile.
+            marginRight: isMobile ? 0 : 0,
+            transform: isMobile ? 'translateX(-44px)' : 'translateX(-46px)'
+          }}
+        >
+          {voiceEnabled ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <line x1="23" y1="9" x2="17" y2="15"/>
+              <line x1="17" y1="9" x2="23" y2="15"/>
+            </svg>
+          )}
+        </button>
       )}
     </div>
   );
