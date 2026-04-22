@@ -346,19 +346,20 @@ export default function App() {
     const coreHi = nextScale.zoomMax - pad;
     const nextInCore = next >= coreLo && next <= coreHi;
 
-    // Fresh entry into a scale's core → start a sticky window
+    // Fresh entry into a scale's core → start a sticky window and snap to
+    // the scale's lowest zoom (scaleStart) so the user lands on the fullest
+    // view of the level, not wherever their wheel delta happened to stop.
     if (nextInCore && lastSettledScaleRef.current !== nextScale.id) {
       lastSettledScaleRef.current = nextScale.id;
       stickyUntilRef.current = now + STICKY_MS;
+      return nextScale.zoomMin + pad;
     }
 
-    // During the sticky window, clamp zoom within the settled scale's core
+    // During the sticky window, hold at the settled scale's scaleStart
     if (stickyUntilRef.current > now && lastSettledScaleRef.current) {
       const stuck = SCALES.find((x) => x.id === lastSettledScaleRef.current);
       if (stuck) {
-        const lo = stuck.zoomMin + pad;
-        const hi = stuck.zoomMax - pad;
-        return Math.max(lo, Math.min(hi, next));
+        return stuck.zoomMin + pad;
       }
     }
     return next;
