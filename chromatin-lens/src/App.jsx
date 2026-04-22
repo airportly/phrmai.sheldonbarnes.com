@@ -263,6 +263,13 @@ export default function App() {
   const lockedRef = useRef(null);
   useEffect(() => { lockedRef.current = lockedScaleId; }, [lockedScaleId]);
 
+  // Zoom-detent ("sticky") system: when manual zoom crosses into a scale's
+  // core (past the fade band), briefly hold the user there so they can see
+  // they've landed on a level before transitioning to the next one.
+  const lastSettledScaleRef = useRef(SCALES[0].id);
+  const stickyUntilRef = useRef(0);
+  const STICKY_MS = 1200;
+
   const containerRef = useRef();
   const isMobile = useIsMobile();
 
@@ -296,14 +303,13 @@ export default function App() {
       const lo = scale.zoomMin + pad;
       const hi = scale.zoomMax - pad;
       if (zoom < lo || zoom > hi) {
-        // Out of range entirely (different level) → snap to the default
-        // zoom for this device. Still within the level but inside the fade
-        // band → just clamp.
         const target = (zoom < scale.zoomMin || zoom > scale.zoomMax)
           ? defaultZoomFor(scale, isMobile)
           : Math.max(lo, Math.min(hi, zoom));
         setZoom(target);
       }
+      // Mark settled so the detent system doesn't re-sticky on the snap.
+      markSettled(engagementScale);
     } else if (preEngagementLockRef.current) {
       // Nothing running → restore the user's pre-engagement lock (or null).
       setLockedScaleId(preEngagementLockRef.current.prev ?? null);
@@ -323,6 +329,45 @@ export default function App() {
       return Math.max(lockedScale.zoomMin + pad, Math.min(lockedScale.zoomMax - pad, next));
     }
     return Math.max(0, Math.min(1, next));
+  };
+
+  // Wrap clampZoom with the sticky-detent behavior. When a scale's core is
+  // freshly entered via manual zoom (wheel/pinch/keyboard arrows), briefly
+  // hold the user there so they notice they've landed on a level.
+  const applyStickyZoom = (raw) => {
+    if (lockedRef.current) return clampZoom(raw); // explicit lock wins
+    const now = performance.now();
+    const next = Math.max(0, Math.min(1, raw));
+    const nextScale = getActiveScale(next);
+    const pad = SCALE_FADE_WIDTH + 0.002;
+    const coreLo = nextScale.zoomMin + pad;
+    const coreHi = nextScale.zoomMax - pad;
+    const nextInCore = next >= coreLo && next <= coreHi;
+
+    // Fresh entry into a scale's core → start a sticky window
+    if (nextInCore && lastSettledScaleRef.current !== nextScale.id) {
+      lastSettledScaleRef.current = nextScale.id;
+      stickyUntilRef.current = now + STICKY_MS;
+    }
+
+    // During the sticky window, clamp zoom within the settled scale's core
+    if (stickyUntilRef.current > now && lastSettledScaleRef.current) {
+      const stuck = SCALES.find((x) => x.id === lastSettledScaleRef.current);
+      if (stuck) {
+        const lo = stuck.zoomMin + pad;
+        const hi = stuck.zoomMax - pad;
+        return Math.max(lo, Math.min(hi, next));
+      }
+    }
+    return next;
+  };
+
+  // Call this whenever we programmatically jump to a scale (sidebar click,
+  // keyboard brackets, engagement lock) — updates the sticky tracker without
+  // triggering a detent pause.
+  const markSettled = (scaleId) => {
+    lastSettledScaleRef.current = scaleId;
+    stickyUntilRef.current = 0;
   };
 
   // Speak just the title of a clicked element (e.g. "HBB — β-globin").
@@ -373,6 +418,7 @@ export default function App() {
     }
     setFocus(null); // old scale's focus is no longer relevant
     setZoom(defaultZoomFor(scale, isMobile));
+    markSettled(scale.id); // skip the sticky detent — user explicitly jumped
   };
 
   const toggleLock = () => {
@@ -391,15 +437,23 @@ export default function App() {
       } else if (e.key === 'l' || e.key === 'L') {
         toggleLock();
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-        setZoom(z => clampZoom(z + 0.02));
+        setZoom(z => applyStickyZoom(z + 0.02));
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-        setZoom(z => clampZoom(z - 0.02));
+        setZoom(z => applyStickyZoom(z - 0.02));
       } else if (e.key === ']') {
         if (lockedRef.current) return;
-        setZoom(z => stepScale(z, +1, isMobile));
+        setZoom((z) => {
+          const next = stepScale(z, +1, isMobile);
+          markSettled(getActiveScale(next).id);
+          return next;
+        });
       } else if (e.key === '[') {
         if (lockedRef.current) return;
-        setZoom(z => stepScale(z, -1, isMobile));
+        setZoom((z) => {
+          const next = stepScale(z, -1, isMobile);
+          markSettled(getActiveScale(next).id);
+          return next;
+        });
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -417,7 +471,7 @@ export default function App() {
       const maxStep = locked ? 0.008 : 0.04;
       const mult = locked ? 0.0004 : 0.0015;
       const step = Math.max(-maxStep, Math.min(maxStep, -e.deltaY * mult));
-      setZoom(z => clampZoom(z + step));
+      setZoom(z => applyStickyZoom(z + step));
     };
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
@@ -443,7 +497,7 @@ export default function App() {
         const maxStep = locked ? 0.006 : 0.03;
         const mult = locked ? 0.0008 : 0.0025;
         const step = Math.max(-maxStep, Math.min(maxStep, delta * mult));
-        setZoom(z => clampZoom(z + step));
+        setZoom(z => applyStickyZoom(z + step));
       }
       lastDist = dist;
     };
