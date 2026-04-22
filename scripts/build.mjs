@@ -31,15 +31,15 @@ async function buildShell() {
   console.log('  → dist/ (landing page at the root)');
 }
 
-// GenomeOS (Vite) — base is /genome-os/, builds to genome-os/dist, copy to dist/genome-os/
-async function buildGenomeOS() {
-  header('Building genome-os (Vite + React + r3f)');
-  const tool = path.join(ROOT, 'genome-os');
+// ChromatinLens (Vite) — base is /chromatin-lens/, builds to chromatin-lens/dist, copy to dist/chromatin-lens/
+async function buildChromatinLens() {
+  header('Building chromatin-lens (Vite + React + r3f)');
+  const tool = path.join(ROOT, 'chromatin-lens');
   run('npm install --no-audit --no-fund', tool);
   run('npm run build', tool);
-  const out = path.join(DIST, 'genome-os');
+  const out = path.join(DIST, 'chromatin-lens');
   await cp(path.join(tool, 'dist'), out, { recursive: true });
-  console.log('  → dist/genome-os/');
+  console.log('  → dist/chromatin-lens/');
 }
 
 // Protein Viewer — static HTML + CDN Mol*, just copy the folder.
@@ -54,7 +54,7 @@ async function buildProteinViewer() {
 async function main() {
   await clean();
   await buildShell();
-  await buildGenomeOS();
+  await buildChromatinLens();
   await buildProteinViewer();
   console.log('\n\x1b[32m✓ Build complete.\x1b[0m  dist/ ready to deploy.');
 }

@@ -62,7 +62,7 @@ function SidebarBody({ activeScale, scaleIndex, info, onCloseInfo, lockedScaleId
       {!hideIntro && (
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.5, color: '#7aa2ff' }}>
-            GenomeOS
+            ChromatinLens
           </div>
           <div style={{ fontSize: 18, fontWeight: 600, marginTop: 6 }}>
             {LOCUS.name}
@@ -260,7 +260,7 @@ export default function Sidebar({
           <ScaleIcon id={activeScale.id} size={30} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#7aa2ff' }}>
-              GenomeOS · Level {scaleIndex + 1} / {SCALES.length}
+              ChromatinLens · Level {scaleIndex + 1} / {SCALES.length}
             </div>
             <div style={{
               fontSize: 14,

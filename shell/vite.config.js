@@ -13,7 +13,7 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     proxy: {
-      '/genome-os': {
+      '/chromatin-lens': {
         target: 'http://localhost:5173',
         changeOrigin: true,
         ws: true // forward Vite HMR WebSocket

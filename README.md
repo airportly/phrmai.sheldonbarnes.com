@@ -12,7 +12,7 @@ pharma teams.
 
 | Card | Tool | Stack |
 |---|---|---|
-| GenomeOS | 8-level interactive chromatin explorer (β-globin locus) with mitosis, loop extrusion, transcription, replication, and a narrated audio tour | Vite · React · three.js |
+| ChromatinLens | 8-level interactive chromatin explorer (β-globin locus) with mitosis, loop extrusion, transcription, replication, and a narrated audio tour | Vite · React · three.js |
 | Molecule Viewer | Hands-free Boltz-2 / OpenFold3 structure viewer | Static HTML · Mol* (CDN) · Web Speech API |
 | PHRMAI SDK | Shared primitives for new tools (coming soon) | TypeScript · React · three.js |
 
@@ -30,7 +30,7 @@ phrmai.sheldonbarnes.com/
 │   ├── package.json
 │   └── vite.config.js      # Dev proxy to each tool
 │
-├── genome-os/              # Vite + React + three.js (own package.json)
+├── chromatin-lens/              # Vite + React + three.js (own package.json)
 ├── protein-viewer/         # Static HTML + Mol* from CDN
 │
 ├── scripts/
@@ -42,7 +42,7 @@ phrmai.sheldonbarnes.com/
 └── dist/                   # Generated output (gitignored)
     ├── index.html          # Shell landing
     ├── assets/             # Shell bundle
-    ├── genome-os/          # /genome-os/ route
+    ├── chromatin-lens/          # /chromatin-lens/ route
     └── protein-viewer/     # /protein-viewer/ route
 ```
 
@@ -56,16 +56,16 @@ That:
 1. Installs dependencies for every sub-project if missing (first run only)
 2. Concurrently starts:
    - **Shell** on `http://localhost:3000` (the one you actually open)
-   - **GenomeOS** Vite dev server on port 5173
+   - **ChromatinLens** Vite dev server on port 5173
    - **Protein Viewer** static server on port 5174
-3. The shell **proxies `/genome-os` and `/protein-viewer`** to their real dev servers, so everything appears as a single origin at `localhost:3000`
+3. The shell **proxies `/chromatin-lens` and `/protein-viewer`** to their real dev servers, so everything appears as a single origin at `localhost:3000`
 
 Open **http://localhost:3000** → landing page → click a card → tool launches in the same tab with full hot-reload.
 
-Want to iterate on a single tool without the shell? Each tool's dev server is reachable on its own port (GenomeOS 5173, protein viewer 5174), or run them individually:
+Want to iterate on a single tool without the shell? Each tool's dev server is reachable on its own port (ChromatinLens 5173, protein viewer 5174), or run them individually:
 
 ```bash
-npm run dev:genome-os        # GenomeOS alone
+npm run dev:chromatin-lens        # ChromatinLens alone
 npm run dev:protein-viewer   # protein viewer alone
 npm run dev:shell            # landing page alone (won't proxy without the others)
 ```
@@ -100,7 +100,7 @@ npm start              # shortcut: build + preview
 As the tools stabilize, the common primitives will be extracted into a shared
 library (working title: `@phrmai/sdk`):
 
-- 3D scaffolding for multi-scale zoom (the GenomeOS scale/focus pipeline)
+- 3D scaffolding for multi-scale zoom (the ChromatinLens scale/focus pipeline)
 - Audio tour orchestration (Web Speech API player)
 - Click-to-learn info cards
 - Imaging panel with stylized schematic + external-source links

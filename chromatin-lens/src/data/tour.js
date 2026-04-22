@@ -29,7 +29,7 @@ export const TOUR_STEPS = [
   {
     id: 'intro',
     narration:
-      "Welcome to GenomeOS. This is an interactive tour of the eight levels of chromatin organization in a human cell, anchored on the beta-globin locus on chromosome eleven. We'll travel from the whole nucleus down to individual atoms, with several animations playing along the way. You can pause or exit the tour at any time. Let's begin.",
+      "Welcome to ChromatinLens. This is an interactive tour of the eight levels of chromatin organization in a human cell, anchored on the beta-globin locus on chromosome eleven. We'll travel from the whole nucleus down to individual atoms, with several animations playing along the way. You can pause or exit the tour at any time. Let's begin.",
     state: { ...RESET, zoom: midpoint('nucleus') }
   },
   {

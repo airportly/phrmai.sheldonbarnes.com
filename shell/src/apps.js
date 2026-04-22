@@ -4,12 +4,12 @@
 
 export const APPS = [
   {
-    id: 'genome-os',
-    name: 'GenomeOS',
+    id: 'chromatin-lens',
+    name: 'ChromatinLens',
     tagline: 'Eight-level interactive chromatin explorer',
     description:
       'Zoom the β-globin locus from the nucleus down to individual atoms. Play mitosis, loop extrusion, transcription, replication — with a narrated audio tour.',
-    path: '/genome-os/',
+    path: '/chromatin-lens/',
     tags: ['Chromatin', '3D', 'Audio tour', 'β-globin'],
     stack: ['Vite', 'React', 'three.js'],
     accent: '#7aa2ff',

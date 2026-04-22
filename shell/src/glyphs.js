@@ -5,7 +5,7 @@ const wrap = (inner) =>
   `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`;
 
 export const GLYPHS = {
-  // GenomeOS — nucleus + chromosome territories
+  // ChromatinLens — nucleus + chromosome territories
   nucleus: (accent, accent2) =>
     wrap(`
       <defs>

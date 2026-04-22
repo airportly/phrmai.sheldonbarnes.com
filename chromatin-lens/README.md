@@ -1,10 +1,10 @@
-# GenomeOS v0.1 Prototype
+# ChromatinLens v0.1 Prototype
 
 A one-day prototype showing smooth zoom across three scales of chromatin organization at the beta globin locus (HBB, chromosome 11).
 
 ## What this is
 
-A proof of concept for the GenomeOS project. It demonstrates the core idea: one continuous zoomable object showing chromatin at three scales (chromatin loop, nucleosome array, DNA double helix), with real sequence data from the HBB locus and a sidebar showing provenance and biological context at each scale.
+A proof of concept for the ChromatinLens project. It demonstrates the core idea: one continuous zoomable object showing chromatin at three scales (chromatin loop, nucleosome array, DNA double helix), with real sequence data from the HBB locus and a sidebar showing provenance and biological context at each scale.
 
 ## What this is not
 
