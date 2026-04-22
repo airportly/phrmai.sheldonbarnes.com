@@ -192,39 +192,156 @@ export default function AudioTourControl({
     );
   }
 
-  // --------------- Active: bottom bar with narration + controls ----------
+  // --------------- Active: compact mobile bar / full desktop bar -----------
   const step = stepList[stepIdx];
   if (!step) return null;
-  const activeBarStyle = isMobile
-    ? {
+
+  const commonBar = {
+    background: 'rgba(12, 18, 32, 0.95)',
+    border: '1px solid rgba(255, 217, 61, 0.45)',
+    borderRadius: 12,
+    color: '#e5e7eb',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    backdropFilter: 'blur(6px)',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+    zIndex: 3,
+    userSelect: 'none'
+  };
+
+  if (isMobile) {
+    // Compact layout:
+    //   row 1: [play/pause 40×40] · 2-line caption · [× 30×30]
+    //   row 2: [prev 30×22] · progress dots · step counter · [next 30×22]
+    return (
+      <div style={{
+        ...commonBar,
         position: 'absolute',
         bottom: 'calc(10px + env(safe-area-inset-bottom))',
         left: 10,
         right: 10,
-        padding: '12px 14px',
-      }
-    : {
-        position: 'absolute',
-        bottom: 20,
-        left: 20,
-        right: 360,
-        maxWidth: 740,
-        padding: '12px 16px',
-      };
+        padding: '10px 12px',
+        fontSize: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={togglePause}
+            title={paused ? 'Resume' : 'Pause'}
+            aria-label={paused ? 'Resume' : 'Pause'}
+            style={{
+              width: 40, height: 40, borderRadius: 8,
+              background: 'rgba(255, 217, 61, 0.18)',
+              border: '1px solid rgba(255, 217, 61, 0.55)',
+              color: '#fde68a',
+              cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+              padding: 0
+            }}
+          >
+            {paused ? <IconPlay size={15} /> : <IconPause size={15} />}
+          </button>
+          <div style={{
+            flex: 1,
+            fontSize: 12,
+            lineHeight: 1.4,
+            color: '#e5e7eb',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            minHeight: '2.8em'
+          }}>
+            {step.narration}
+          </div>
+          <button
+            onClick={stop}
+            title="End tour"
+            aria-label="End tour"
+            style={{
+              width: 30, height: 30, borderRadius: 6,
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: 'rgba(255,255,255,0.04)',
+              color: '#cbd5e1',
+              cursor: 'pointer',
+              fontSize: 16, padding: 0, lineHeight: 1,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >×</button>
+        </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+          <button
+            onClick={goPrev}
+            disabled={stepIdx === 0}
+            aria-label="Previous"
+            style={{
+              width: 30, height: 22, borderRadius: 4,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: stepIdx === 0 ? '#4b5563' : '#cbd5e1',
+              cursor: stepIdx === 0 ? 'not-allowed' : 'pointer',
+              padding: 0,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0
+            }}
+          ><IconPrev size={11} /></button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, flexWrap: 'nowrap', overflow: 'hidden' }}>
+            {stepList.map((s, i) => (
+              <button
+                key={s.id}
+                onClick={() => setStepIdx(i)}
+                title={s.id}
+                style={{
+                  flex: 1,
+                  minWidth: 6,
+                  height: 3,
+                  borderRadius: 2,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: i === stepIdx
+                    ? '#fde68a'
+                    : i < stepIdx ? 'rgba(253, 224, 71, 0.35)' : 'rgba(255,255,255,0.10)',
+                  padding: 0
+                }}
+              />
+            ))}
+          </div>
+          <span style={{ fontSize: 10, color: '#9ca3af', fontVariantNumeric: 'tabular-nums', letterSpacing: 0.3, minWidth: 34, textAlign: 'center' }}>
+            {stepIdx + 1}/{stepList.length}
+          </span>
+          <button
+            onClick={goNext}
+            disabled={stepIdx >= stepList.length - 1}
+            aria-label="Next"
+            style={{
+              width: 30, height: 22, borderRadius: 4,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: stepIdx >= stepList.length - 1 ? '#4b5563' : '#cbd5e1',
+              cursor: stepIdx >= stepList.length - 1 ? 'not-allowed' : 'pointer',
+              padding: 0,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0
+            }}
+          ><IconNext size={11} /></button>
+        </div>
+      </div>
+    );
+  }
+
+  // --------------- Desktop: full narration bar ---------------
   return (
     <div style={{
-      ...activeBarStyle,
-      background: 'rgba(12, 18, 32, 0.95)',
-      border: '1px solid rgba(255, 217, 61, 0.45)',
-      borderRadius: 12,
-      color: '#e5e7eb',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      fontSize: 13,
-      backdropFilter: 'blur(6px)',
-      boxShadow: '0 10px 40px rgba(0,0,0,0.4)',
-      zIndex: 3,
-      userSelect: 'none'
+      ...commonBar,
+      position: 'absolute',
+      bottom: 20,
+      left: 20,
+      right: 360,
+      maxWidth: 740,
+      padding: '12px 16px',
+      fontSize: 13
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#fde68a', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -262,18 +379,14 @@ export default function AudioTourControl({
           onClick={stop}
           title="End tour"
           style={{
-            width: 26,
-            height: 26,
+            width: 26, height: 26,
             border: '1px solid rgba(255,255,255,0.15)',
             background: 'rgba(255,255,255,0.04)',
             color: '#cbd5e1',
             borderRadius: 4,
             cursor: 'pointer',
-            fontSize: 14,
-            padding: 0,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            fontSize: 14, padding: 0,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
           }}
           aria-label="End tour"
         >×</button>
@@ -283,8 +396,8 @@ export default function AudioTourControl({
         fontSize: 13,
         color: '#e5e7eb',
         lineHeight: 1.55,
-        minHeight: isMobile ? 72 : 50,
-        maxHeight: isMobile ? 140 : 120,
+        minHeight: 50,
+        maxHeight: 120,
         overflow: 'auto',
         marginBottom: 10
       }}>
@@ -304,9 +417,7 @@ export default function AudioTourControl({
             cursor: stepIdx === 0 ? 'not-allowed' : 'pointer',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
           }}
-        >
-          <IconPrev size={14} />
-        </button>
+        ><IconPrev size={14} /></button>
         <button
           onClick={togglePause}
           title={paused ? 'Resume' : 'Pause'}
@@ -333,9 +444,7 @@ export default function AudioTourControl({
             cursor: stepIdx >= stepList.length - 1 ? 'not-allowed' : 'pointer',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
           }}
-        >
-          <IconNext size={14} />
-        </button>
+        ><IconNext size={14} /></button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 3, flex: 1, marginLeft: 8, flexWrap: 'nowrap', overflow: 'hidden' }}>
           {stepList.map((s, i) => (

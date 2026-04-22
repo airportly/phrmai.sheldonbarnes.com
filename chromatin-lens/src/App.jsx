@@ -170,8 +170,10 @@ export default function App() {
     if (s.altFormId !== undefined) setAltFormId(s.altFormId);
     if (s.selectedInfo !== undefined) {
       setSelectedInfo(s.selectedInfo);
-      setFocus(null);
     }
+    // Tour-driven focus target: defaults to null via RESET, so each step
+    // can center the camera on a specific element or clear focus explicitly.
+    if (s.focus !== undefined) setFocus(s.focus);
   };
 
   useEffect(() => {
@@ -473,13 +475,27 @@ export default function App() {
         />
       )}
 
-      {/* Top overlays — all timeline/dynamics controls. Auto-hide during
-          tour on desktop; reveal when cursor enters the top 240 px. Mobile
-          renders them directly (no auto-hide on touch devices). */}
+      {/* Top overlays — all timeline/dynamics controls. Auto-hide during tour:
+          desktop reveals when the cursor enters the top 240 px; mobile hides
+          them entirely during tour (since there's no hover) and the user can
+          exit the tour to access them. */}
       {!(isMobile && sidebarOpen) && (() => {
-        const topAutoHidden = tourActive && !isMobile && !inTopPanel;
+        // Desktop reveals on cursor proximity; mobile has no cursor, so stays
+        // hidden for the duration of the tour.
+        const topAutoHidden = tourActive && !inTopPanel;
         const wrapperStyle = isMobile
-          ? { display: 'contents' } // transparent wrapper on mobile — children render inline
+          ? {
+              display: tourActive ? 'block' : 'contents',
+              // On mobile during tour, wrap in a positioned container that
+              // slides the whole stack up out of view.
+              ...(tourActive ? {
+                position: 'absolute', top: 0, left: 0, right: 0,
+                zIndex: 3,
+                transform: topAutoHidden ? 'translateY(-110%)' : 'translateY(0)',
+                transition: 'transform 0.35s cubic-bezier(.2,.8,.2,1)',
+                pointerEvents: topAutoHidden ? 'none' : 'auto'
+              } : {})
+            }
           : {
               position: 'absolute', top: 0, left: 0, right: 0,
               zIndex: 3,

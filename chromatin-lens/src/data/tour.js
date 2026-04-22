@@ -9,7 +9,50 @@ const midpoint = (id) => {
   return (s.zoomMin + s.zoomMax) / 2;
 };
 
+// Recompute of LoopScene's parametric teardrop curve (kept in sync with
+// LoopScene.generateLoopPoints). Returns local coords the tour can hand
+// to the focus-translator so the camera centers on that point.
+function loopPoint(t) {
+  const angle = t * Math.PI * 2;
+  const radius = 2.5;
+  const shape = Math.sin(t * Math.PI);
+  return [
+    Math.sin(angle) * radius * shape,
+    Math.cos(angle) * radius * shape - 0.5,
+    Math.sin(t * Math.PI * 3) * 0.3
+  ];
+}
+
+// Focus targets referenced by tour steps. Shape matches what setFocus()
+// expects: { scaleId, localPoint }. When applied, ScaleController smoothly
+// translates the scene so localPoint ends up at world origin — regardless
+// of zoom or autoRotate.
+const FOCUS = {
+  // Nucleus level — chr11 territory position (from CHROMOSOME_TERRITORIES)
+  chr11: { scaleId: 'nucleus', localPoint: [0.2, 0.1, 0.0] },
+
+  // TAD level — HBB TAD is in the middle, neighbor is offset left
+  tadHbb: { scaleId: 'tad', localPoint: [0, 0, 0] },
+  tadNeighbor: { scaleId: 'tad', localPoint: [-3.2, 0, 0] },
+
+  // Loop level — positions along the teardrop curve
+  loopLcr: { scaleId: 'loop', localPoint: loopPoint(0.02) },
+  loopHbe1: { scaleId: 'loop', localPoint: loopPoint(0.145) },
+  loopHbg2: { scaleId: 'loop', localPoint: loopPoint(0.375) },
+  loopHbg1: { scaleId: 'loop', localPoint: loopPoint(0.475) },
+  loopHbd: { scaleId: 'loop', localPoint: loopPoint(0.71) },
+  loopHbb: { scaleId: 'loop', localPoint: loopPoint(0.825) },
+  loopCohesin: { scaleId: 'loop', localPoint: [0, -0.5, 0] },
+
+  // Nucleosome level — central nucleosome (index 6 of 12)
+  nucCentral: { scaleId: 'nucleosomes', localPoint: [0, Math.sin(6 * 0.6) * 0.15, Math.cos(6 * 0.4) * 0.12] },
+
+  // Helix / atomic — center on origin (already the natural center)
+  origin: { localPoint: [0, 0, 0] }
+};
+
 // Sensible default state that a step can partially override.
+// `focus: null` means "clear any existing focus".
 const RESET = {
   mitosisDetail: 'full',
   mitosisProgress: 0,
@@ -23,6 +66,7 @@ const RESET = {
   replicationPlaying: false,
   altFormId: 'b',
   selectedInfo: null,
+  focus: null,
 };
 
 export const TOUR_STEPS = [
@@ -35,8 +79,8 @@ export const TOUR_STEPS = [
   {
     id: 'nucleus',
     narration:
-      "We're inside a human cell nucleus, about ten micrometers across. All 46 chromosomes live in here, each in its own spatial territory. The yellow one is chromosome eleven, our home for the entire tour. The pink blob is the nucleolus, where ribosomes are made. The small green rings are lamina-associated domains — silenced chromatin regions pressed against the nuclear envelope.",
-    state: { ...RESET, zoom: midpoint('nucleus') }
+      "We're inside a human cell nucleus, about ten micrometers across. All 46 chromosomes live in here, each in its own spatial territory. The yellow one, now at center, is chromosome eleven — our home for the entire tour. The pink blob is the nucleolus, where ribosomes are made. The small green rings are lamina-associated domains — silenced chromatin regions pressed against the nuclear envelope.",
+    state: { ...RESET, zoom: midpoint('nucleus'), focus: FOCUS.chr11 }
   },
   {
     id: 'mitosis',
@@ -52,47 +96,53 @@ export const TOUR_STEPS = [
     state: { ...RESET, zoom: midpoint('compartment') }
   },
   {
-    id: 'tad',
+    id: 'tad-hbb',
     narration:
-      "A million base pairs at a time, chromatin folds into self-interacting neighborhoods called Topologically Associating Domains, or TADs. The gold bubble in the middle is the TAD that contains our beta-globin genes. The blue bubbles on either side are neighboring TADs. The red spheres between them are CTCF boundary elements — insulators that keep the neighborhoods distinct.",
-    state: { ...RESET, zoom: midpoint('tad') }
+      "A million base pairs at a time, chromatin folds into self-interacting neighborhoods called Topologically Associating Domains, or TADs. The gold bubble now at center is the TAD that contains our beta-globin genes — the home neighborhood. Regulatory contacts mostly stay inside this TAD.",
+    state: { ...RESET, zoom: midpoint('tad'), focus: FOCUS.tadHbb }
+  },
+  {
+    id: 'tad-neighbor',
+    narration:
+      "Now look at the neighboring TAD. The red spheres between the TADs are CTCF boundary elements — insulators anchored by convergent CTCF sites. They stop regulatory contacts from crossing. A single boundary mutation can re-wire which enhancers reach which genes and cause disease.",
+    state: { ...RESET, zoom: midpoint('tad'), focus: FOCUS.tadNeighbor }
   },
   {
     id: 'loop-intro',
     narration:
-      "Inside the TAD, we finally see an individual chromatin loop, about a hundred kilobases across. The purple sphere is the Locus Control Region — a powerful enhancer. The yellow beam is its physical contact with the HBB gene. This contact is what turns HBB on.",
-    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult' }
+      "Inside the TAD, we finally see an individual chromatin loop, about a hundred kilobases across. The purple sphere at the center is the Locus Control Region — a powerful enhancer. The yellow beam is its physical contact with the HBB gene. This contact is what turns HBB on.",
+    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult', focus: FOCUS.loopLcr }
   },
   {
     id: 'loop-embryonic',
     narration:
-      "The remarkable thing about this loop is that it retargets during development. Early in embryogenesis, the Locus Control Region contacts HBE1 — the embryonic globin gene. This is the hemoglobin of a yolk-sac embryo, only days old.",
-    state: { ...RESET, zoom: midpoint('loop'), stageId: 'embryonic' }
+      "The remarkable thing about this loop is that it retargets during development. Early in embryogenesis, the Locus Control Region contacts HBE1 — the embryonic globin gene, now at center. This is the hemoglobin of a yolk-sac embryo, only days old.",
+    state: { ...RESET, zoom: midpoint('loop'), stageId: 'embryonic', focus: FOCUS.loopHbe1 }
   },
   {
     id: 'loop-fetal',
     narration:
-      "After about six weeks of gestation, the loop switches. The LCR now contacts the fetal genes HBG1 and HBG2. Fetal hemoglobin binds oxygen more tightly than adult hemoglobin — which is how a fetus pulls oxygen across the placenta from its mother's blood.",
-    state: { ...RESET, zoom: midpoint('loop'), stageId: 'fetal' }
+      "After about six weeks of gestation, the loop switches. The LCR now contacts the fetal genes HBG1 and HBG2 — centered here. Fetal hemoglobin binds oxygen more tightly than adult hemoglobin, which is how a fetus pulls oxygen across the placenta from its mother's blood.",
+    state: { ...RESET, zoom: midpoint('loop'), stageId: 'fetal', focus: FOCUS.loopHbg2 }
   },
   {
     id: 'loop-adult',
     narration:
-      "At birth, the switch flips again. The LCR targets HBB, the adult beta-globin gene, and stays there for life. Mutations in HBB cause sickle-cell disease and beta-thalassemia. The first-ever CRISPR therapy, Casgevy, works by silencing the BCL11A transcription factor, reactivating these fetal genes to compensate for broken adult HBB.",
-    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult' }
+      "At birth, the switch flips again. The LCR targets HBB, the adult beta-globin gene now at the center, and stays there for life. Mutations in HBB cause sickle-cell disease and beta-thalassemia. The first-ever CRISPR therapy, Casgevy, works by silencing BCL11A, reactivating the fetal genes we just saw to compensate for broken adult HBB.",
+    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult', focus: FOCUS.loopHbb }
   },
   {
     id: 'loop-extrusion',
     narration:
-      "How does a loop form in the first place? The purple ring at the base is cohesin. Let's rewind and watch cohesin build this loop from scratch, reeling DNA through its ring at about a thousand base pairs per second, stopping only when it bumps into the two red CTCF sites.",
-    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult', extrusionProgress: 0, extrusionPlaying: true },
+      "How does a loop form in the first place? The purple ring now at center is cohesin. Watch as it builds the loop from scratch, reeling DNA through its ring at about a thousand base pairs per second, stopping only when it bumps into the two red CTCF sites.",
+    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult', focus: FOCUS.loopCohesin, extrusionProgress: 0, extrusionPlaying: true },
     pauseAfterMs: 2000
   },
   {
     id: 'loop-transcription',
     narration:
       "And this is what the loop is for. Now that LCR and HBB are in contact, RNA polymerase two loads onto HBB and transcribes. The pink blobs moving along the gene are polymerase molecules; the teal particles drifting outward are nascent messenger RNAs being released. In a real red-blood-cell precursor, beta-globin mRNA is produced at thousands of copies per cell.",
-    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult', extrusionProgress: 1, transcribing: true }
+    state: { ...RESET, zoom: midpoint('loop'), stageId: 'adult', extrusionProgress: 1, transcribing: true, focus: FOCUS.loopHbb }
   },
   {
     id: 'fiber',
@@ -104,7 +154,7 @@ export const TOUR_STEPS = [
     id: 'nucleosomes-intro',
     narration:
       "At the two-kilobase scale, we see the true fundamental unit of chromatin — the nucleosome. Each pink disc is an octamer of eight histone proteins. The blue DNA wraps around it about one-point-six times, burying a hundred and forty-seven base pairs per nucleosome. This is the shape that gives chromatin the famous beads-on-a-string appearance.",
-    state: { ...RESET, zoom: midpoint('nucleosomes'), histoneMarkId: 'none' }
+    state: { ...RESET, zoom: midpoint('nucleosomes'), histoneMarkId: 'none', focus: FOCUS.nucCentral }
   },
   {
     id: 'nucleosomes-k27ac',
@@ -158,7 +208,8 @@ const STEP_SCALE = {
   'nucleus': 'nucleus',
   'mitosis': 'nucleus',
   'compartment': 'compartment',
-  'tad': 'tad',
+  'tad-hbb': 'tad',
+  'tad-neighbor': 'tad',
   'loop-intro': 'loop',
   'loop-embryonic': 'loop',
   'loop-fetal': 'loop',
