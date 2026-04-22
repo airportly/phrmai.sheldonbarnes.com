@@ -5,8 +5,10 @@ import { DNA_SEQUENCE, COMPLEMENT } from '../data/locus';
 import Selectable from './Selectable';
 import Label from './Label';
 
-// Canonical B-form DNA parameters
-const BP_RISE = 0.34;
+// Canonical B-form DNA parameters (scaled down from 0.34 → 0.18 so the full
+// 50-bp helix fits the ~10-unit vertical viewport at grow=1 — previously the
+// top/bottom and the replication-fork extremes were clipped.)
+const BP_RISE = 0.18;
 const BP_PER_TURN = 10.5;
 const HELIX_RADIUS = 1.0;
 

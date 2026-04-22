@@ -70,6 +70,11 @@ export default function AudioTourControl({
   const currentStepRef = useRef(null);
   // Timers for in-step focus shifts — cleared on step change or stop.
   const focusShiftTimersRef = useRef([]);
+  // Char-index that SpeechSynthesis last reported as the start of a word.
+  // Used to highlight the current word in the transcript caption.
+  const [spokenCharIndex, setSpokenCharIndex] = useState(-1);
+  const currentWordRef = useRef(null);
+  const captionScrollRef = useRef(null);
 
   useEffect(() => {
     if (voices.length && !voiceURI) {
@@ -115,7 +120,18 @@ export default function AudioTourControl({
       }
     }
 
+    // Reset the word-highlight state for this step.
+    setSpokenCharIndex(-1);
+
     const u = new SpeechSynthesisUtterance(step.narration);
+    u.onboundary = (evt) => {
+      if (currentStepRef.current !== step) return;
+      // Chrome fires 'word' on word starts; Safari often doesn't populate
+      // name, but charIndex is correct. Accept either.
+      if (!evt.name || evt.name === 'word') {
+        setSpokenCharIndex(evt.charIndex);
+      }
+    };
     u.rate = 1.0;
     u.pitch = 1.0;
     u.volume = 1.0;
@@ -212,6 +228,67 @@ export default function AudioTourControl({
   const step = stepList[stepIdx];
   if (!step) return null;
 
+  // Pre-parse the narration into word ranges so we can highlight the
+  // currently-spoken word and auto-scroll it into view.
+  const wordRanges = (() => {
+    const ranges = [];
+    if (!step.narration) return ranges;
+    const re = /\S+/g;
+    let m;
+    while ((m = re.exec(step.narration)) !== null) {
+      ranges.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+    }
+    return ranges;
+  })();
+
+  let currentWordIdx = -1;
+  if (spokenCharIndex >= 0) {
+    for (let i = 0; i < wordRanges.length; i++) {
+      if (wordRanges[i].start <= spokenCharIndex) currentWordIdx = i;
+      else break;
+    }
+  }
+
+  // Scroll the highlighted word into view whenever it changes.
+  useEffect(() => {
+    const el = currentWordRef.current;
+    if (!el) return;
+    // scrollIntoView with 'nearest' keeps horizontal position and only
+    // scrolls vertically when needed — avoids jumpy horizontal shifts.
+    try {
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    } catch { /* older browsers */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWordIdx]);
+
+  // Renders the narration as a list of spans, highlighting the current word.
+  const renderTranscript = () => (
+    <>
+      {wordRanges.map((r, idx) => {
+        const isCurrent = idx === currentWordIdx;
+        return (
+          <React.Fragment key={idx}>
+            {idx > 0 && ' '}
+            <span
+              ref={isCurrent ? currentWordRef : null}
+              style={{
+                background: isCurrent ? 'rgba(253, 224, 71, 0.30)' : 'transparent',
+                color: isCurrent ? '#fef3c7' : 'inherit',
+                borderRadius: 3,
+                padding: isCurrent ? '1px 3px' : 0,
+                margin: isCurrent ? '0 -3px' : 0,
+                transition: 'background 120ms ease, color 120ms ease',
+                fontWeight: isCurrent ? 600 : 'normal'
+              }}
+            >
+              {r.text}
+            </span>
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+
   const commonBar = {
     background: 'rgba(12, 18, 32, 0.95)',
     border: '1px solid rgba(255, 217, 61, 0.45)',
@@ -256,19 +333,22 @@ export default function AudioTourControl({
           >
             {paused ? <IconPlay size={15} /> : <IconPause size={15} />}
           </button>
-          <div style={{
-            flex: 1,
-            fontSize: 12,
-            lineHeight: 1.4,
-            color: '#e5e7eb',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            minHeight: '2.8em'
-          }}>
-            {step.narration}
+          <div
+            ref={captionScrollRef}
+            style={{
+              flex: 1,
+              fontSize: 12,
+              lineHeight: 1.4,
+              color: '#e5e7eb',
+              maxHeight: '2.8em',
+              minHeight: '2.8em',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none'
+            }}
+          >
+            {renderTranscript()}
           </div>
           <button
             onClick={stop}
@@ -408,16 +488,19 @@ export default function AudioTourControl({
         >×</button>
       </div>
 
-      <div style={{
-        fontSize: 13,
-        color: '#e5e7eb',
-        lineHeight: 1.55,
-        minHeight: 50,
-        maxHeight: 120,
-        overflow: 'auto',
-        marginBottom: 10
-      }}>
-        {step.narration}
+      <div
+        ref={captionScrollRef}
+        style={{
+          fontSize: 13,
+          color: '#e5e7eb',
+          lineHeight: 1.55,
+          minHeight: 50,
+          maxHeight: 120,
+          overflow: 'auto',
+          marginBottom: 10
+        }}
+      >
+        {renderTranscript()}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

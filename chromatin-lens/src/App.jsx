@@ -117,6 +117,9 @@ export default function App() {
   const altForm = ALT_FORMS.find(f => f.id === altFormId);
   // Audio tour — driven by AudioTourControl; may set any of the above states.
   const [tourActive, setTourActive] = useState(false);
+  // Snapshot of the user's lock state just before the tour started — restored
+  // on exit so we don't permanently overwrite their choice.
+  const preTourLockRef = useRef(null);
   // Which steps the tour plays. Default is the full tour; a level tour swaps
   // in a filtered list via stepsForScale().
   const [tourSteps, setTourSteps] = useState(TOUR_STEPS);
@@ -231,6 +234,28 @@ export default function App() {
 
   const containerRef = useRef();
   const isMobile = useIsMobile();
+
+  // Lock zoom to the current level while the tour plays so users can't
+  // accidentally wheel/pinch out of whatever level is being narrated. Saves
+  // the user's pre-tour lock (including "no lock") and restores it on exit.
+  // Re-locks whenever the tour navigates to a different scale.
+  useEffect(() => {
+    if (tourActive) {
+      // Snapshot the user's lock state on first entry — use a sentinel so we
+      // can distinguish "no prior lock" from "haven't snapshotted yet".
+      if (preTourLockRef.current === undefined || preTourLockRef.current === null) {
+        // store explicit null-vs-string via a one-shot boxed value
+        preTourLockRef.current = { prev: lockedScaleId };
+      }
+      const scale = getActiveScale(zoom);
+      if (lockedScaleId !== scale.id) setLockedScaleId(scale.id);
+    } else if (preTourLockRef.current && typeof preTourLockRef.current === 'object') {
+      // Restore previous lock (string id or null)
+      setLockedScaleId(preTourLockRef.current.prev ?? null);
+      preTourLockRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourActive, zoom]);
 
   // Clamp zoom to the locked scale, or [0,1] otherwise.
   const clampZoom = (next) => {

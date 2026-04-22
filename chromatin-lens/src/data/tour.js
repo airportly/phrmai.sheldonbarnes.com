@@ -9,6 +9,14 @@ const midpoint = (id) => {
   return (s.zoomMin + s.zoomMax) / 2;
 };
 
+// Slightly past each scale's start so `grow === 1` and the scene renders at
+// its natural size. Useful for tour steps that want the entire scene (e.g.
+// the full helix during replication) to fit the viewport.
+const scaleStart = (id) => {
+  const s = SCALES.find((x) => x.id === id);
+  return s.zoomMin + 0.003;
+};
+
 // Recompute of LoopScene's parametric teardrop curve (kept in sync with
 // LoopScene.generateLoopPoints). Returns local coords the tour can hand
 // to the focus-translator so the camera centers on that point.
@@ -69,6 +77,9 @@ const FOCUS = {
   nucCentral: { scaleId: 'nucleosomes', localPoint: [0, Math.sin(6 * 0.6) * 0.15, Math.cos(6 * 0.4) * 0.12] },
 
   // ---- Helix / atomic ----
+  // G-quadruplex overlay is rendered at offsetX=3.0 to the right of the main
+  // helix in HelixScene's GQuadruplexOverlay; center on it so it fills view.
+  altG4: { scaleId: 'helix', localPoint: [3.0, 0, 0] },
   origin: { localPoint: [0, 0, 0] }
 };
 
@@ -194,38 +205,43 @@ export const TOUR_STEPS = [
     id: 'nucleosomes-intro',
     narration:
       "At the two-kilobase scale, we see the true fundamental unit of chromatin — the nucleosome. Each pink disc is an octamer of eight histone proteins. The blue DNA wraps around it about one-point-six times, burying a hundred and forty-seven base pairs per nucleosome. This is the shape that gives chromatin the famous beads-on-a-string appearance.",
-    state: { ...RESET, zoom: midpoint('nucleosomes'), histoneMarkId: 'none', focus: FOCUS.nucCentral }
+    state: { ...RESET, zoom: scaleStart('nucleosomes'), histoneMarkId: 'none', focus: FOCUS.nucCentral }
   },
   {
     id: 'nucleosomes-k27ac',
     narration:
       "Protruding from each nucleosome are histone tails. These tails carry combinations of chemical modifications — the so-called histone code. Let's paint all the tails green with H3K27 acetylation, the hallmark mark of active enhancers. This is what the LCR actually looks like at the nucleosome level — acetylated to the hilt.",
-    state: { ...RESET, zoom: midpoint('nucleosomes'), histoneMarkId: 'h3k27ac' }
+    state: { ...RESET, zoom: scaleStart('nucleosomes'), histoneMarkId: 'h3k27ac' }
   },
   {
     id: 'nucleosomes-k27me3',
     narration:
       "Now flip to H3K27 tri-methylation, shown in red. This is the mark of Polycomb silencing, laid down by the PRC2 complex. In adult red-blood-cell precursors, all the fetal globin nucleosomes carry this mark. Reactivating those silenced nucleosomes is the strategy behind sickle-cell CRISPR therapy.",
-    state: { ...RESET, zoom: midpoint('nucleosomes'), histoneMarkId: 'h3k27me3' }
+    state: { ...RESET, zoom: scaleStart('nucleosomes'), histoneMarkId: 'h3k27me3' }
   },
   {
     id: 'helix-intro',
+    // Use scaleStart so grow=1 and the full helix fits the viewport.
     narration:
       "Zooming deeper, we reach the DNA double helix itself. Two antiparallel strands wound around each other, with ten and a half base pairs per turn. Each rung is a base pair — A binds T with two hydrogen bonds, G binds C with three. This is the molecule that Watson, Crick, and Franklin figured out in 1953.",
-    state: { ...RESET, zoom: midpoint('helix') }
+    state: { ...RESET, zoom: scaleStart('helix') }
   },
   {
     id: 'helix-replication',
+    // Also at scaleStart — the fork sweeps top to bottom of the full helix;
+    // we need the whole thing in view so the fork never goes off-screen.
     narration:
       "Let's watch DNA replicate. The yellow ring is a helicase, unwinding the parents. Behind the fork you'll see continuous green synthesis on the leading strand, and discontinuous cyan Okazaki fragments on the lagging strand. Fifty thousand forks like this operate at once in every dividing cell, copying the whole diploid genome — six billion base pairs — in about eight hours.",
-    state: { ...RESET, zoom: midpoint('helix'), replicationProgress: 0, replicationPlaying: true },
+    state: { ...RESET, zoom: scaleStart('helix'), replicationProgress: 0, replicationPlaying: true },
     pauseAfterMs: 2000
   },
   {
     id: 'helix-g4',
+    // Focus on the G-quadruplex overlay (rendered offset to the right of the
+    // main helix) so the user actually sees what the narration describes.
     narration:
-      "DNA doesn't always stay as a clean double helix. Here, a G-rich region has folded into a four-stranded G-quadruplex. G-quadruplexes form at telomeres and at the promoters of cancer genes like MYC. Small molecules that stabilize G-quadruplexes are being tested as cancer drugs.",
-    state: { ...RESET, zoom: midpoint('helix'), altFormId: 'g4' }
+      "DNA doesn't always stay as a clean double helix. Here, a G-rich region has folded into a four-stranded G-quadruplex — now at center. G-quadruplexes form at telomeres and at the promoters of cancer genes like MYC. Small molecules that stabilize G-quadruplexes are being tested as cancer drugs.",
+    state: { ...RESET, zoom: scaleStart('helix'), altFormId: 'g4', focus: FOCUS.altG4 }
   },
   {
     id: 'atomic',
