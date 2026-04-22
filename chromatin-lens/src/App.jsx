@@ -28,11 +28,30 @@ function scaleMidpoint(scale) {
   return (scale.zoomMin + scale.zoomMax) / 2;
 }
 
-function stepScale(currentZoom, direction) {
+// Just past the scale's fade-in band so grow === 1 and the full scene is
+// visible. Mobile defaults to this instead of midpoint so everything fits
+// in the narrower viewport without the user having to pinch-zoom out.
+function scaleStartZoom(scale) {
+  return scale.zoomMin + SCALE_FADE_WIDTH + 0.002;
+}
+
+// Default zoom for a given device: midpoint on desktop (more dramatic,
+// zoomed-in framing), scaleStart on mobile (full scene in view).
+function defaultZoomFor(scale, isMobile) {
+  return isMobile ? scaleStartZoom(scale) : scaleMidpoint(scale);
+}
+
+function stepScale(currentZoom, direction, isMobile) {
   const active = getActiveScale(currentZoom);
   const idx = SCALES.findIndex(s => s.id === active.id);
   const nextIdx = Math.max(0, Math.min(SCALES.length - 1, idx + direction));
-  return scaleMidpoint(SCALES[nextIdx]);
+  return defaultZoomFor(SCALES[nextIdx], isMobile);
+}
+
+// Is this device in mobile layout? Duplicated from useIsMobile to be usable
+// synchronously in useState(lazy init) before the hook runs.
+function isMobileNow(breakpoint = 820) {
+  return typeof window !== 'undefined' && window.innerWidth < breakpoint;
 }
 
 // Breakpoint: below this, switch to mobile layout (phone + iPad portrait).
@@ -49,7 +68,7 @@ function useIsMobile(breakpoint = 820) {
 }
 
 export default function App() {
-  const [zoom, setZoom] = useState(scaleMidpoint(SCALES[0]));
+  const [zoom, setZoom] = useState(() => defaultZoomFor(SCALES[0], isMobileNow()));
   const [selectedInfo, setSelectedInfo] = useState(null);
   const [lockedScaleId, setLockedScaleId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer open
@@ -159,7 +178,19 @@ export default function App() {
 
   // Apply a partial state snapshot — used by the tour to advance through steps.
   const applyTourState = (s) => {
-    if (s.zoom !== undefined) setZoom(s.zoom);
+    if (s.zoom !== undefined) {
+      if (isMobile) {
+        // On mobile, every step snaps back to scaleStart of the target scale,
+        // so the user always sees the full scene at the start of each chapter
+        // — even if they pinch-zoomed in on a previous chapter.
+        const scale = SCALES.find(
+          (sc) => s.zoom >= sc.zoomMin - SCALE_FADE_WIDTH && s.zoom <= sc.zoomMax + SCALE_FADE_WIDTH
+        );
+        setZoom(scale ? scaleStartZoom(scale) : s.zoom);
+      } else {
+        setZoom(s.zoom);
+      }
+    }
     if (s.mitosisDetail !== undefined) setMitosisDetail(s.mitosisDetail);
     if (s.mitosisProgress !== undefined) setMitosisProgress(s.mitosisProgress);
     if (s.mitosisPlaying !== undefined) setMitosisPlaying(s.mitosisPlaying);
@@ -322,7 +353,7 @@ export default function App() {
       setLockedScaleId(null);
     }
     setFocus(null); // old scale's focus is no longer relevant
-    setZoom(scaleMidpoint(scale));
+    setZoom(defaultZoomFor(scale, isMobile));
   };
 
   const toggleLock = () => {
@@ -346,10 +377,10 @@ export default function App() {
         setZoom(z => clampZoom(z - 0.02));
       } else if (e.key === ']') {
         if (lockedRef.current) return;
-        setZoom(z => stepScale(z, +1));
+        setZoom(z => stepScale(z, +1, isMobile));
       } else if (e.key === '[') {
         if (lockedRef.current) return;
-        setZoom(z => stepScale(z, -1));
+        setZoom(z => stepScale(z, -1, isMobile));
       }
     };
     window.addEventListener('keydown', handleKey);
