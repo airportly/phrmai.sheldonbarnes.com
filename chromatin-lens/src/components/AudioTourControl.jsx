@@ -158,6 +158,8 @@ export default function AudioTourControl({
   const goNext = () => setStepIdx((i) => Math.min(stepList.length - 1, i + 1));
 
   // --------------- Inactive: small "Take tour" button --------------------
+  // Icon-only on mobile so the voice toggle and other top-right controls
+  // don't run into it.
   if (!active) {
     const inactiveStyle = {
       position: 'absolute',
@@ -166,8 +168,11 @@ export default function AudioTourControl({
       zIndex: 3,
       display: 'inline-flex',
       alignItems: 'center',
-      gap: 6,
-      padding: isMobile ? '8px 12px' : '7px 12px',
+      justifyContent: 'center',
+      gap: isMobile ? 0 : 6,
+      padding: isMobile ? 0 : '7px 12px',
+      width: isMobile ? 40 : 'auto',
+      height: isMobile ? 40 : 'auto',
       fontSize: 12,
       fontWeight: 600,
       letterSpacing: 0.4,
@@ -180,9 +185,9 @@ export default function AudioTourControl({
       backdropFilter: 'blur(4px)'
     };
     return (
-      <button onClick={start} style={inactiveStyle} title="Play a narrated tour of the app">
-        <IconHeadphones size={14} />
-        Take the tour
+      <button onClick={start} style={inactiveStyle} title="Play a narrated tour of the app" aria-label="Take the tour">
+        <IconHeadphones size={isMobile ? 18 : 14} />
+        {!isMobile && 'Take the tour'}
       </button>
     );
   }

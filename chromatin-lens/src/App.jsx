@@ -132,18 +132,22 @@ export default function App() {
     try { localStorage.setItem('cl-voice-names', voiceEnabled ? 'on' : 'off'); } catch {}
   }, [voiceEnabled]);
 
-  // Auto-hide during tour: edge-proximity reveals for sidebar + top overlays.
-  const [edgeNearRight, setEdgeNearRight] = useState(false);
-  const [edgeNearTop, setEdgeNearTop] = useState(false);
+  // Auto-hide during tour: reveal zones cover each panel's footprint, not
+  // just a tiny edge strip, so moving the cursor INTO the panel doesn't
+  // make it hide. Buffer added so there's no flicker at the boundary.
+  const [inRightPanel, setInRightPanel] = useState(false);
+  const [inTopPanel, setInTopPanel] = useState(false);
   useEffect(() => {
     if (!tourActive || isMobile) {
-      setEdgeNearRight(false);
-      setEdgeNearTop(false);
+      setInRightPanel(false);
+      setInTopPanel(false);
       return;
     }
     const handler = (e) => {
-      setEdgeNearRight(e.clientX > window.innerWidth - 48);
-      setEdgeNearTop(e.clientY < 72);
+      // Right-panel zone: sidebar is 340 px wide; 20 px buffer = 360 px.
+      setInRightPanel(e.clientX > window.innerWidth - 360);
+      // Top-panel zone: stacked overlays are ~180–220 px tall; add buffer.
+      setInTopPanel(e.clientY < 240);
     };
     window.addEventListener('mousemove', handler);
     return () => window.removeEventListener('mousemove', handler);
@@ -415,14 +419,28 @@ export default function App() {
         />
       </Canvas>
 
-      {/* Sidebar — auto-hides during a tour unless the user hovers the right
-          edge OR has clicked an element to read about. Slides off-screen. */}
-      {(() => {
-        const sidebarAutoHidden = tourActive && !isMobile && !edgeNearRight && !selectedInfo;
+      {/* Sidebar — on mobile, render directly (the Sidebar component handles
+          its own compact header + bottom-sheet positioning). On desktop,
+          wrap in an auto-hide container that slides off during tour unless
+          the cursor is over the sidebar's area or an element is selected. */}
+      {isMobile ? (
+        <Sidebar
+          zoom={zoom}
+          selectedInfo={selectedInfo}
+          onCloseInfo={clearSelection}
+          lockedScaleId={lockedScaleId}
+          onJump={jumpToScale}
+          isMobile={isMobile}
+          open={sidebarOpen}
+          onOpen={() => setSidebarOpen(true)}
+          onClose={() => setSidebarOpen(false)}
+        />
+      ) : (() => {
+        const sidebarAutoHidden = tourActive && !inRightPanel && !selectedInfo;
         return (
           <div style={{
             position: 'absolute', top: 0, right: 0,
-            width: isMobile ? '100%' : 340,
+            width: 340,
             height: '100dvh',
             zIndex: 4,
             transform: sidebarAutoHidden ? 'translateX(100%)' : 'translateX(0)',
@@ -456,17 +474,21 @@ export default function App() {
       )}
 
       {/* Top overlays — all timeline/dynamics controls. Auto-hide during
-          tour; reveal on cursor proximity to the top edge. */}
+          tour on desktop; reveal when cursor enters the top 240 px. Mobile
+          renders them directly (no auto-hide on touch devices). */}
       {!(isMobile && sidebarOpen) && (() => {
-        const topAutoHidden = tourActive && !isMobile && !edgeNearTop;
+        const topAutoHidden = tourActive && !isMobile && !inTopPanel;
+        const wrapperStyle = isMobile
+          ? { display: 'contents' } // transparent wrapper on mobile — children render inline
+          : {
+              position: 'absolute', top: 0, left: 0, right: 0,
+              zIndex: 3,
+              transform: topAutoHidden ? 'translateY(-110%)' : 'translateY(0)',
+              transition: 'transform 0.35s cubic-bezier(.2,.8,.2,1)',
+              pointerEvents: topAutoHidden ? 'none' : 'auto'
+            };
         return (
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0,
-            zIndex: 3,
-            transform: topAutoHidden ? 'translateY(-110%)' : 'translateY(0)',
-            transition: 'transform 0.35s cubic-bezier(.2,.8,.2,1)',
-            pointerEvents: topAutoHidden ? 'none' : 'auto'
-          }}>
+          <div style={wrapperStyle}>
             <TimelineControl
               zoom={zoom}
               visibleOnScaleId="loop"
@@ -555,9 +577,8 @@ export default function App() {
         />
       )}
 
-      {/* Voice mute toggle — small icon next to the Take-the-tour button.
-          Only shown when a tour isn't playing (during tour, muting element
-          names is automatic anyway). */}
+      {/* Voice mute toggle — small icon to the LEFT of the Take-the-tour
+          button. On mobile both are icon-only so they fit in the top-right. */}
       {!tourActive && !(isMobile && sidebarOpen) && (
         <button
           onClick={() => {
@@ -569,9 +590,12 @@ export default function App() {
           style={{
             position: 'absolute',
             top: isMobile ? 'calc(10px + env(safe-area-inset-top))' : 20,
-            right: isMobile ? 10 : 360,
+            // Mobile: tour button is 40 wide at right:10 → start voice at right: 58.
+            // Desktop: "Take the tour" button is ~140 wide at right:360 → start voice at right: 512.
+            right: isMobile ? 58 : 512,
             zIndex: 3,
-            width: 34, height: 34,
+            width: isMobile ? 40 : 34,
+            height: isMobile ? 40 : 34,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             padding: 0,
             color: voiceEnabled ? '#cbd5e1' : '#475569',
@@ -579,10 +603,7 @@ export default function App() {
             border: `1px solid ${voiceEnabled ? 'rgba(255,255,255,0.15)' : 'rgba(71,85,105,0.45)'}`,
             borderRadius: 6,
             cursor: 'pointer',
-            backdropFilter: 'blur(4px)',
-            // Position to the LEFT of "Take the tour" (desktop) or to its left on mobile.
-            marginRight: isMobile ? 0 : 0,
-            transform: isMobile ? 'translateX(-44px)' : 'translateX(-46px)'
+            backdropFilter: 'blur(4px)'
           }}
         >
           {voiceEnabled ? (

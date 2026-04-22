@@ -84,8 +84,8 @@ export default function ScaleHint({ zoom, onJump, lockedScaleId, onToggleLock, o
               alignItems: 'center',
               justifyContent: 'center',
               padding: 0,
-              width: isMobile ? 36 : 30,
-              height: isMobile ? 32 : 26,
+              width: isMobile ? 44 : 30,
+              height: isMobile ? 44 : 26,
               color: '#fde68a',
               background: 'rgba(255, 217, 61, 0.14)',
               border: '1px solid rgba(255, 217, 61, 0.45)',
@@ -94,7 +94,7 @@ export default function ScaleHint({ zoom, onJump, lockedScaleId, onToggleLock, o
               flexShrink: 0
             }}
           >
-            <svg width={isMobile ? 15 : 13} height={isMobile ? 15 : 13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width={isMobile ? 17 : 13} height={isMobile ? 17 : 13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
               <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
             </svg>
@@ -112,7 +112,7 @@ export default function ScaleHint({ zoom, onJump, lockedScaleId, onToggleLock, o
             gap: 6,
             padding: isMobile ? '6px 9px' : '4px 9px',
             minWidth: isMobile ? 44 : undefined,
-            minHeight: isMobile ? 32 : undefined,
+            minHeight: isMobile ? 44 : undefined,
             fontSize: 11,
             fontWeight: 600,
             letterSpacing: 0.4,
