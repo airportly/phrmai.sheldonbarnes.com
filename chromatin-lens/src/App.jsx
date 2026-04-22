@@ -268,7 +268,9 @@ export default function App() {
   // they've landed on a level before transitioning to the next one.
   const lastSettledScaleRef = useRef(SCALES[0].id);
   const stickyUntilRef = useRef(0);
-  const STICKY_MS = 1200;
+  // Longer pause (3.5 s) at each scale's core so the user has real time to
+  // register that they've landed on a level before the zoom continues.
+  const STICKY_MS = 3500;
 
   const containerRef = useRef();
   const isMobile = useIsMobile();

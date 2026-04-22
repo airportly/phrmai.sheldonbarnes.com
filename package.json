@@ -10,12 +10,14 @@
     "dev:chromatin-lens": "cd chromatin-lens && npm run dev",
     "dev:protein-viewer": "npx --yes http-server protein-viewer -p 5174 -c-1 --cors",
     "install:all": "node scripts/install-all.mjs",
+    "icons": "node scripts/render-icons.mjs",
     "build": "node scripts/build.mjs",
     "preview": "npx --yes serve dist -l 3000",
     "start": "npm run build && npm run preview"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "sharp": "^0.34.5"
   },
   "engines": {
     "node": ">=20"
