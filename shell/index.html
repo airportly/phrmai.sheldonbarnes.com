@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PHRMAI — toward HumanOS</title>
+  <meta name="description" content="Interactive pharma-AI tools on the road to HumanOS. By Sheldon Barnes." />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0a0e1a" />
+  <link rel="canonical" href="https://phrmai.sheldonbarnes.com/" />
+  <meta property="og:title" content="PHRMAI — toward HumanOS" />
+  <meta property="og:description" content="Interactive pharma-AI tools on the road to HumanOS. By Sheldon Barnes." />
+  <meta property="og:url" content="https://phrmai.sheldonbarnes.com/" />
+  <meta property="og:type" content="website" />
+</head>
+<body>
+  <main>
+    <div class="topbar">
+      <div class="topbar__brand">
+        <span class="dot"></span>
+        PHRMA<span style="color: #475569">.</span>COM
+      </div>
+      <nav class="topbar__links">
+        <a href="https://www.sheldonbarnes.com/about">about</a>
+        <a href="https://www.sheldonbarnes.com">main site ↗</a>
+      </nav>
+    </div>
+
+    <section class="hero">
+      <h1>Tools on the road to <span class="gradient">HumanOS</span>.</h1>
+      <p>
+        Interactive pharma-AI tools that communicate biology, drug discovery,
+        and the 3D genome through direct manipulation — not slides. Each tool
+        is self-contained; together they accrete into a unified HumanOS.
+      </p>
+      <div class="hero__by">
+        by <a href="https://www.sheldonbarnes.com/about">Sheldon Barnes</a>
+      </div>
+    </section>
+
+    <div class="section-label">Apps</div>
+    <section id="apps" class="apps-grid"></section>
+
+    <div class="roadmap">
+      <span class="roadmap__icon">Roadmap</span>
+      <div>
+        <p>
+          Each tool is a self-contained folder in this repo that deploys as a
+          static asset under <code>phrmai.sheldonbarnes.com/&lt;tool-name&gt;/</code>.
+          A shared <strong>PHRMAI SDK</strong> (in progress) will extract the
+          common primitives — 3D scaffolding, audio tours, click-to-learn info
+          cards, imaging panels — so each new tool can focus on its own biology.
+        </p>
+        <p>
+          Planned: pathway browsers, single-cell explorers, drug-target
+          interaction tours, narrated walkthroughs that connect molecular
+          events to clinical outcomes.
+        </p>
+      </div>
+    </div>
+
+    <footer>
+      <span>PHRMAI · toward HumanOS · prototype v0.1</span>
+      <span><a href="https://www.sheldonbarnes.com">← sheldonbarnes.com</a></span>
+    </footer>
+  </main>
+
+  <div id="splash" class="splash">
+    <div class="splash__inner">
+      <div class="splash__glyph"></div>
+      <div class="splash__name"></div>
+      <div class="splash__label">Launching…</div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

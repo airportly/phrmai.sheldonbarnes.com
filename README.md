@@ -3,77 +3,112 @@
 Interactive pharma-AI tools by [Sheldon Barnes](https://www.sheldonbarnes.com),
 deployed to **https://phrmai.sheldonbarnes.com/**.
 
-Each tool is a self-contained folder. At build time they are collected into
-`dist/<tool-name>/` and served statically. Over time these tools accrete into
-a unified **HumanOS** — an interactive mental model of human biology for
+The site works like an app store: a shell landing page lists every tool as a
+card; clicking a card launches the tool. Over time the collection accretes
+into **HumanOS** — a unified interactive mental model of human biology for
 pharma teams.
 
 ## Tools
 
-| Path | Tool | Stack |
+| Card | Tool | Stack |
 |---|---|---|
-| [`genome-os/`](./genome-os) | 8-level interactive chromatin explorer (β-globin locus) with mitosis, loop extrusion, transcription, replication, and a narrated audio tour | Vite · React · three.js · @react-three/fiber |
-| [`protein-viewer/`](./protein-viewer) | Hands-free 3D Boltz-2 / OpenFold3 structure viewer with voice control | Static HTML · Mol* (CDN) · Web Speech API |
+| GenomeOS | 8-level interactive chromatin explorer (β-globin locus) with mitosis, loop extrusion, transcription, replication, and a narrated audio tour | Vite · React · three.js |
+| Molecule Viewer | Hands-free Boltz-2 / OpenFold3 structure viewer | Static HTML · Mol* (CDN) · Web Speech API |
+| PHRMAI SDK | Shared primitives for new tools (coming soon) | TypeScript · React · three.js |
 
 ## Structure
 
 ```
 phrmai.sheldonbarnes.com/
-├── genome-os/              # Vite project — own package.json
-├── protein-viewer/         # Plain HTML + Mol* via CDN — no build
+├── shell/                  # PHRMAI app-store landing (Vite)
+│   ├── src/
+│   │   ├── apps.js         # The app manifest — edit to add a tool
+│   │   ├── glyphs.js       # Inline SVG icons per tool
+│   │   ├── main.js         # Renders cards, handles launches
+│   │   └── styles.css
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js      # Dev proxy to each tool
+│
+├── genome-os/              # Vite + React + three.js (own package.json)
+├── protein-viewer/         # Static HTML + Mol* from CDN
+│
 ├── scripts/
-│   ├── build.mjs           # Root build: collects tools into dist/
-│   └── landing.html        # Landing page → dist/index.html
-├── package.json            # Root build entry point
-├── vercel.json             # Vercel deployment config
-└── dist/                   # Generated — each tool lives under dist/<tool>/
-    ├── index.html          # Landing page listing all tools
-    ├── genome-os/
-    └── protein-viewer/
+│   ├── build.mjs           # Builds shell + every tool into dist/
+│   └── install-all.mjs     # Installs deps across every sub-project
+│
+├── package.json            # Root — one dev / build / start
+├── vercel.json             # Vercel config
+└── dist/                   # Generated output (gitignored)
+    ├── index.html          # Shell landing
+    ├── assets/             # Shell bundle
+    ├── genome-os/          # /genome-os/ route
+    └── protein-viewer/     # /protein-viewer/ route
 ```
 
-## Local development
-
-Run one tool at a time using its own dev server:
+## Local development — one command
 
 ```bash
-# GenomeOS (Vite, port 5173)
-npm run dev:genome-os
-
-# Protein viewer (http-server, port 5174)
-npm run dev:protein-viewer
+npm run dev
 ```
 
-Each tool is self-contained — you can `cd` into any tool folder and use its
-native workflow.
+That:
+1. Installs dependencies for every sub-project if missing (first run only)
+2. Concurrently starts:
+   - **Shell** on `http://localhost:3000` (the one you actually open)
+   - **GenomeOS** Vite dev server on port 5173
+   - **Protein Viewer** static server on port 5174
+3. The shell **proxies `/genome-os` and `/protein-viewer`** to their real dev servers, so everything appears as a single origin at `localhost:3000`
 
-## Build
+Open **http://localhost:3000** → landing page → click a card → tool launches in the same tab with full hot-reload.
+
+Want to iterate on a single tool without the shell? Each tool's dev server is reachable on its own port (GenomeOS 5173, protein viewer 5174), or run them individually:
 
 ```bash
-npm run build
+npm run dev:genome-os        # GenomeOS alone
+npm run dev:protein-viewer   # protein viewer alone
+npm run dev:shell            # landing page alone (won't proxy without the others)
 ```
 
-This runs `scripts/build.mjs`, which:
+## Production build
 
-1. Wipes `dist/`
-2. `npm install` + `npm run build` inside `genome-os/`, copies its `dist/` to `dist/genome-os/`
-3. Copies `protein-viewer/` straight to `dist/protein-viewer/`
-4. Copies `scripts/landing.html` to `dist/index.html`
+```bash
+npm run build          # builds everything into ./dist/
+npm run preview        # serves dist/ locally on port 3000
+npm start              # shortcut: build + preview
+```
 
 ## Deploy (Vercel)
 
 1. Import this repo into Vercel
-2. Framework preset: **Other** (vercel.json pins the rest)
-3. Add custom domain `phrmai.sheldonbarnes.com`
-4. Future tools auto-deploy on every `git push`
+2. Framework preset: **Other** (vercel.json pins build command + output dir)
+3. Custom domain: `phrmai.sheldonbarnes.com`
+4. Every `git push` rebuilds and redeploys all tools
 
 ## Adding a new tool
 
-1. Create a new folder at the repo root (e.g., `pathway-browser/`)
-2. If it needs a build step, give it its own `package.json`
-3. Add its build step to `scripts/build.mjs` — either `run('npm run build', ...)` + copy, or just copy if it's static
-4. Add a card to `scripts/landing.html`
-5. `git push` — Vercel rebuilds everything
+1. **Create the folder** at the repo root — e.g. `pathway-browser/` — with whatever stack fits
+2. **Register it** in `shell/src/apps.js` (name, tagline, tags, accent colors, glyph id)
+3. **Add a dev proxy** in `shell/vite.config.js` pointing `/<tool-slug>` → its dev port
+4. **Add a build step** in `scripts/build.mjs` (either `run('npm run build', …)` + copy, or a straight folder copy for static tools)
+5. If it has its own `package.json`, add it to `PROJECTS` in `scripts/install-all.mjs`
+6. **Optional**: add an SVG glyph in `shell/src/glyphs.js`
+7. `git push` — Vercel rebuilds
+
+## The PHRMAI SDK (in progress)
+
+As the tools stabilize, the common primitives will be extracted into a shared
+library (working title: `@phrmai/sdk`):
+
+- 3D scaffolding for multi-scale zoom (the GenomeOS scale/focus pipeline)
+- Audio tour orchestration (Web Speech API player)
+- Click-to-learn info cards
+- Imaging panel with stylized schematic + external-source links
+- Shared dark-mode design tokens
+
+Future tools will import these instead of re-implementing. That's the path to
+HumanOS — not a single monolith, but a portfolio of tools that speak a shared
+visual and interaction language.
 
 ## License
 

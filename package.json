@@ -5,9 +5,17 @@
   "description": "PHRMAI — pharma-AI interactive tools, on the road to HumanOS. Hosted at phrmai.sheldonbarnes.com.",
   "type": "module",
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "dev": "npm run install:all && concurrently --kill-others-on-fail --names shell,genome-os,protein-viewer --prefix-colors cyan,magenta,green \"npm:dev:shell\" \"npm:dev:genome-os\" \"npm:dev:protein-viewer\"",
+    "dev:shell": "cd shell && npm run dev",
     "dev:genome-os": "cd genome-os && npm run dev",
-    "dev:protein-viewer": "cd protein-viewer && npx --yes http-server -p 5174 -c-1"
+    "dev:protein-viewer": "npx --yes http-server protein-viewer -p 5174 -c-1 --cors",
+    "install:all": "node scripts/install-all.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "npx --yes serve dist -l 3000",
+    "start": "npm run build && npm run preview"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
   },
   "engines": {
     "node": ">=20"

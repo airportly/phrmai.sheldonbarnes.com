@@ -1,0 +1,14 @@
+{
+  "name": "phrmai-shell",
+  "private": true,
+  "version": "0.1.0",
+  "description": "PHRMAI app-store shell — the landing page that lists and launches every tool.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  }
+}
