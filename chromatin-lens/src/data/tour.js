@@ -58,9 +58,12 @@ const FOCUS = {
   compartmentHbbRed: { scaleId: 'compartment', localPoint: compartmentPoint(0.5667) },
 
   // ---- TAD level ----
+  // CTCF boundary spheres now render at y=0.4, z=0.3 (lifted above the TAD
+  // equatorial plane where the big bubbles overlap). Match that in focus
+  // coords so the camera actually centers on the sphere, not an empty spot.
   tadHbb: { scaleId: 'tad', localPoint: [0, 0, 0] },
   tadNeighborLeft: { scaleId: 'tad', localPoint: [-3.2, 0, 0] },
-  tadCtcfLeft: { scaleId: 'tad', localPoint: [-1.6, 0, 0] }, // red boundary between left+middle
+  tadCtcfLeft: { scaleId: 'tad', localPoint: [-1.6, 0.4, 0.3] },
 
   // ---- Loop level — positions along the teardrop curve ----
   loopLcr: { scaleId: 'loop', localPoint: loopPoint(0.02) },

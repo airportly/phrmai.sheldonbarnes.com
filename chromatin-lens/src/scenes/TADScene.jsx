@@ -85,28 +85,46 @@ export default function TADScene({ opacity = 1, onSelect, selectedInfo }) {
         );
       })}
 
-      {/* TAD boundary markers: CTCF clusters between adjacent TADs */}
-      {[-1.6, 1.6].map((x, i) => (
-        <group key={i} position={[x, 0, 0]}>
-          <Selectable infoId="tad-boundary" onSelect={onSelect}>
+      {/* TAD boundary markers: CTCF clusters between adjacent TADs.
+          Made noticeably bigger (0.16 → 0.28) and pushed slightly forward in
+          z so they pop out of the translucent bubbles instead of getting
+          lost between them. A soft outer halo adds a glow ring that reads
+          even when the scene is small on mobile. */}
+      {[-1.6, 1.6].map((x, i) => {
+        const isSelected = selectedInfo === 'tad-boundary';
+        return (
+          <group key={i} position={[x, 0.4, 0.3]}>
+            {/* Outer glow halo */}
             <mesh>
-              <sphereGeometry args={[0.16, 20, 20]} />
-              <meshStandardMaterial
+              <sphereGeometry args={[0.42, 20, 20]} />
+              <meshBasicMaterial
                 color="#ff6b6b"
                 transparent
-                opacity={opacity}
-                emissive="#ff3030"
-                emissiveIntensity={sel(selectedInfo, 'tad-boundary', 0.5, 0.95)}
+                opacity={opacity * (isSelected ? 0.25 : 0.14)}
+                depthWrite={false}
               />
             </mesh>
-          </Selectable>
-          {i === 0 && (
-            <Label position={[0, 0.45, 0]} color="#fecaca" distanceFactor={9}>
-              TAD boundary
-            </Label>
-          )}
-        </group>
-      ))}
+            {/* Core sphere */}
+            <Selectable infoId="tad-boundary" onSelect={onSelect}>
+              <mesh>
+                <sphereGeometry args={[0.28, 24, 24]} />
+                <meshStandardMaterial
+                  color="#ff6b6b"
+                  transparent
+                  opacity={opacity}
+                  emissive="#ff3030"
+                  emissiveIntensity={sel(selectedInfo, 'tad-boundary', 0.75, 1.1)}
+                />
+              </mesh>
+            </Selectable>
+            {i === 0 && (
+              <Label position={[0, 0.6, 0]} color="#fecaca" distanceFactor={9}>
+                CTCF boundary
+              </Label>
+            )}
+          </group>
+        );
+      })}
 
       {/* Hi-C hint: a subtle triangular plane overlay behind the HBB TAD */}
       <mesh position={[0, -1.9, -0.5]} rotation={[-Math.PI / 2.5, 0, 0]}>
