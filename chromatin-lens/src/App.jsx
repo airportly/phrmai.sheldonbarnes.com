@@ -268,6 +268,7 @@ export default function App() {
   // they've landed on a level before transitioning to the next one.
   const lastSettledScaleRef = useRef(SCALES[0].id);
   const stickyUntilRef = useRef(0);
+  const stickyZoomRef = useRef(null);
   // Longer pause (3.5 s) at each scale's core so the user has real time to
   // register that they've landed on a level before the zoom continues.
   const STICKY_MS = 1500;
@@ -346,21 +347,24 @@ export default function App() {
     const coreHi = nextScale.zoomMax - pad;
     const nextInCore = next >= coreLo && next <= coreHi;
 
-    // Fresh entry into a scale's core → start a sticky window and snap to
-    // the scale's lowest zoom (scaleStart) so the user lands on the fullest
-    // view of the level, not wherever their wheel delta happened to stop.
+    // Fresh entry into a scale's core → start a sticky window. Snap to the
+    // edge the user crossed in through: scaleStart when zooming in (entered
+    // near coreLo) or scaleEnd when zooming out (entered near coreHi). That
+    // way the detent feels like a catch at the boundary in either direction
+    // rather than a push further along the zoom motion.
     if (nextInCore && lastSettledScaleRef.current !== nextScale.id) {
       lastSettledScaleRef.current = nextScale.id;
       stickyUntilRef.current = now + STICKY_MS;
-      return nextScale.zoomMin + pad;
+      const distLo = next - coreLo;
+      const distHi = coreHi - next;
+      const snap = distLo <= distHi ? coreLo : coreHi;
+      stickyZoomRef.current = snap;
+      return snap;
     }
 
-    // During the sticky window, hold at the settled scale's scaleStart
-    if (stickyUntilRef.current > now && lastSettledScaleRef.current) {
-      const stuck = SCALES.find((x) => x.id === lastSettledScaleRef.current);
-      if (stuck) {
-        return stuck.zoomMin + pad;
-      }
+    // During the sticky window, hold at the pinned zoom value
+    if (stickyUntilRef.current > now && stickyZoomRef.current !== null) {
+      return stickyZoomRef.current;
     }
     return next;
   };
@@ -371,6 +375,7 @@ export default function App() {
   const markSettled = (scaleId) => {
     lastSettledScaleRef.current = scaleId;
     stickyUntilRef.current = 0;
+    stickyZoomRef.current = null;
   };
 
   // Speak just the title of a clicked element (e.g. "HBB — β-globin").
