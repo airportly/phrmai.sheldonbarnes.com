@@ -270,7 +270,7 @@ export default function App() {
   const stickyUntilRef = useRef(0);
   // Longer pause (3.5 s) at each scale's core so the user has real time to
   // register that they've landed on a level before the zoom continues.
-  const STICKY_MS = 3500;
+  const STICKY_MS = 1500;
 
   const containerRef = useRef();
   const isMobile = useIsMobile();
