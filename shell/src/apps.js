@@ -4,6 +4,21 @@
 
 export const APPS = [
   {
+    id: 'humanos',
+    name: 'HumanOS',
+    tagline: 'Holographic clinical AI for cardiometabolic discovery',
+    description:
+      'Rotating 3D body grounded in the cardiometabolic-research MCP. Click an organ, switch to the catalog, traverse the constellation, or fly through a 3D galaxy of 1,903 disease-associated proteins. Every value traces to a real database row.',
+    path: '/humanos/',
+    tags: ['Cardiometabolic', '3D body', 'Catalog', 'Galaxy', 'AlphaFold', 'AlphaMissense'],
+    stack: ['Next.js', 'React', 'three.js', 'MCP'],
+    accent: '#2dd4bf',
+    accent2: '#fbbf24',
+    glyph: 'body',
+    version: 'v1.0',
+    status: 'live'
+  },
+  {
     id: 'chromatin-lens',
     name: 'ChromatinLens',
     tagline: 'Eight-level interactive chromatin explorer',

@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+.env.local
+.env.production
+*.log
+.DS_Store
+.api-backup/
+
+# Raw BodyParts3D OBJ archive (>800MB) — only needed if you re-run Blender
+# mesh conversion. The converted GLBs at public/assets/anatomy/ ARE committed
+# so Vercel can serve them without Blender at deploy time.
+assets/bodyparts3d-source/

@@ -23,6 +23,28 @@ export const GLYPHS = {
       <circle cx="32" cy="35" r="3" fill="#fb7185" opacity="0.85"/>
     `),
 
+  // HumanOS — body silhouette with a glowing organ at the chest
+  body: (accent, accent2) =>
+    wrap(`
+      <defs>
+        <radialGradient id="bodyGlow" cx="50%" cy="55%" r="50%">
+          <stop offset="0%" stop-color="${accent}" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect x="2" y="2" width="60" height="60" rx="6" fill="url(#bodyGlow)"/>
+      <circle cx="32" cy="13" r="6" fill="none" stroke="${accent}" stroke-width="1.6" stroke-opacity="0.85"/>
+      <path d="M 32 19 L 32 22" stroke="${accent}" stroke-width="1.6" stroke-opacity="0.85"/>
+      <path d="M 19 26 Q 32 22 45 26 L 45 38 Q 32 42 19 38 Z"
+            fill="none" stroke="${accent}" stroke-width="1.6" stroke-opacity="0.85"/>
+      <path d="M 19 26 L 11 36" stroke="${accent}" stroke-width="1.6" stroke-opacity="0.85" stroke-linecap="round"/>
+      <path d="M 45 26 L 53 36" stroke="${accent}" stroke-width="1.6" stroke-opacity="0.85" stroke-linecap="round"/>
+      <path d="M 23 38 L 21 56" stroke="${accent}" stroke-width="1.6" stroke-opacity="0.85" stroke-linecap="round"/>
+      <path d="M 41 38 L 43 56" stroke="${accent}" stroke-width="1.6" stroke-opacity="0.85" stroke-linecap="round"/>
+      <circle cx="32" cy="32" r="3.5" fill="${accent2}" opacity="0.95"/>
+      <circle cx="32" cy="32" r="6" fill="none" stroke="${accent2}" stroke-opacity="0.45" stroke-width="1"/>
+    `),
+
   // Molecule viewer — double-helix loop
   helix: (accent, accent2) =>
     wrap(`

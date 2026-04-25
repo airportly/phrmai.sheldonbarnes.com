@@ -13,6 +13,11 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     proxy: {
+      '/humanos': {
+        target: 'http://localhost:3010',
+        changeOrigin: true,
+        ws: true // Next.js HMR over WebSocket
+      },
       '/chromatin-lens': {
         target: 'http://localhost:5173',
         changeOrigin: true,

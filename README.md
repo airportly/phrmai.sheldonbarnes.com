@@ -12,6 +12,7 @@ pharma teams.
 
 | Card | Tool | Stack |
 |---|---|---|
+| HumanOS | Holographic clinical AI for cardiometabolic discovery: rotating 3D body, 1,903 disease-associated proteins surfaced via four views (body, catalog, constellation, 3D galaxy), real AlphaFold confidence + AlphaMissense variants from the cardiometabolic-research MCP | Next.js · React · three.js · MCP |
 | ChromatinLens | 8-level interactive chromatin explorer (β-globin locus) with mitosis, loop extrusion, transcription, replication, and a narrated audio tour | Vite · React · three.js |
 | Molecule Viewer | Hands-free Boltz-2 / OpenFold3 structure viewer | Static HTML · Mol* (CDN) · Web Speech API |
 | PHRMAI SDK | Shared primitives for new tools (coming soon) | TypeScript · React · three.js |
@@ -30,7 +31,8 @@ phrmai.sheldonbarnes.com/
 │   ├── package.json
 │   └── vite.config.js      # Dev proxy to each tool
 │
-├── chromatin-lens/              # Vite + React + three.js (own package.json)
+├── humanos/                # Next.js, statically exported with basePath=/humanos
+├── chromatin-lens/         # Vite + React + three.js (own package.json)
 ├── protein-viewer/         # Static HTML + Mol* from CDN
 │
 ├── scripts/
@@ -109,6 +111,24 @@ library (working title: `@phrmai/sdk`):
 Future tools will import these instead of re-implementing. That's the path to
 HumanOS — not a single monolith, but a portfolio of tools that speak a shared
 visual and interaction language.
+
+## HumanOS deployment notes
+
+HumanOS is the only Next.js tool in the portfolio. The build pipeline statically exports it via `npm run build:static` (in `humanos/`), which:
+
+1. Renames `pages/api/` to `.api-backup/` so the export doesn't trip on dynamic routes.
+2. Runs `next build` with `EXPORT=1` and `NEXT_PUBLIC_BASE_PATH=/humanos`.
+3. Restores the `pages/api/` folder afterward.
+
+The output lands in `humanos/out/`, which the root `scripts/build.mjs` copies into `dist/humanos/`.
+
+**Live AI is intentionally off in this static build.** The UI shows an "AI offline" badge and falls back to local keyword matching against the snapshot. To wire live Anthropic Claude:
+
+1. Add a Vercel Edge Function at the repo root: `api/humanos-chat.ts`. Reuse the implementation in `humanos/src/lib/claude-client.ts`.
+2. Set `ANTHROPIC_API_KEY` (and optionally `MCP_SERVER_URL`) in Vercel env vars.
+3. In `humanos/src/components/HumanOS.tsx`, change the two `apiPath('/api/chat')` calls to `apiPath('/api/humanos-chat')` so they hit the Edge function at the phrmai root rather than the (absent) Next.js API route.
+
+This keeps HumanOS itself fully static — no Vercel Next.js framework preset needed — while still routing live AI calls through a server-side endpoint that keeps the API key out of the browser.
 
 ## License
 

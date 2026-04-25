@@ -1,0 +1,112 @@
+{
+  "_metadata": {
+    "description": "Metadata for the 13 cardiometabolic diseases in scope. Used for UI labels, color coding, and EFO ID lookup when calling search_proteins_by_disease.",
+    "scope": "Cardiometabolic Disease v1.0"
+  },
+  "diseases": {
+    "diabetes_mellitus": {
+      "label": "Diabetes mellitus",
+      "shortLabel": "Diabetes",
+      "efoId": "EFO_0000400",
+      "color": "#1D9E75",
+      "primaryOrgan": "pancreas",
+      "description": "Group of metabolic disorders characterized by hyperglycemia. Type 1 (autoimmune beta cell destruction) and Type 2 (insulin resistance with relative insulin deficiency) are the major forms."
+    },
+    "obesity": {
+      "label": "Obesity",
+      "shortLabel": "Obesity",
+      "efoId": "EFO_0001073",
+      "color": "#D4537E",
+      "primaryOrgan": "adipose",
+      "description": "Excess body fat accumulation associated with health risks. BMI over 30 kg/m^2 is the clinical threshold."
+    },
+    "metabolic_syndrome": {
+      "label": "Metabolic syndrome",
+      "shortLabel": "Metabolic syndrome",
+      "efoId": "EFO_0000195",
+      "color": "#993556",
+      "primaryOrgan": "adipose",
+      "description": "Cluster of conditions including central obesity, hypertension, hyperglycemia, and dyslipidemia that increase cardiovascular and diabetes risk."
+    },
+    "nafld": {
+      "label": "Non-alcoholic fatty liver disease",
+      "shortLabel": "NAFLD",
+      "efoId": "EFO_0003095",
+      "color": "#BA7517",
+      "primaryOrgan": "liver",
+      "description": "Hepatic steatosis without significant alcohol consumption. Spectrum includes simple steatosis, NASH, fibrosis, and cirrhosis."
+    },
+    "cad": {
+      "label": "Coronary artery disease",
+      "shortLabel": "CAD",
+      "efoId": "EFO_0001645",
+      "color": "#D85A30",
+      "primaryOrgan": "heart",
+      "description": "Atherosclerotic narrowing of coronary arteries leading to reduced myocardial perfusion. Major cause of MI and angina."
+    },
+    "mi": {
+      "label": "Myocardial infarction",
+      "shortLabel": "MI",
+      "efoId": "EFO_0000612",
+      "color": "#A32D2D",
+      "primaryOrgan": "heart",
+      "description": "Acute coronary occlusion leading to myocardial necrosis. Classified as STEMI or NSTEMI."
+    },
+    "heart_failure": {
+      "label": "Heart failure",
+      "shortLabel": "HF",
+      "efoId": "EFO_0003144",
+      "color": "#7F77DD",
+      "primaryOrgan": "heart",
+      "description": "Inability of the heart to pump sufficient blood to meet metabolic demands. HFrEF, HFmrEF, and HFpEF subtypes by ejection fraction."
+    },
+    "hypertension": {
+      "label": "Hypertension",
+      "shortLabel": "HTN",
+      "efoId": "EFO_0000537",
+      "color": "#185FA5",
+      "primaryOrgan": "kidneys",
+      "description": "Chronic elevation of blood pressure above 130/80 mmHg per current guidelines. Major risk factor for stroke, MI, heart failure, and renal disease."
+    },
+    "dyslipidemia": {
+      "label": "Dyslipidemia",
+      "shortLabel": "Dyslipidemia",
+      "efoId": "EFO_0004732",
+      "color": "#EF9F27",
+      "primaryOrgan": "liver",
+      "description": "Abnormal lipid levels including elevated LDL, low HDL, or elevated triglycerides. Major modifiable cardiovascular risk factor."
+    },
+    "atherosclerosis": {
+      "label": "Atherosclerosis",
+      "shortLabel": "Atherosclerosis",
+      "efoId": "EFO_0003914",
+      "color": "#C42E2E",
+      "primaryOrgan": "liver",
+      "description": "Progressive arterial plaque formation. Underlies most cardiovascular disease. Foam cell formation, endothelial dysfunction, and chronic inflammation are key mechanisms."
+    },
+    "afib": {
+      "label": "Atrial fibrillation",
+      "shortLabel": "AFib",
+      "efoId": "EFO_0000275",
+      "color": "#D85A30",
+      "primaryOrgan": "heart",
+      "description": "Most common sustained cardiac arrhythmia. Disorganized atrial electrical activity leading to thrombus risk and embolic stroke."
+    },
+    "stroke": {
+      "label": "Stroke",
+      "shortLabel": "Stroke",
+      "efoId": "EFO_0000712",
+      "color": "#7F77DD",
+      "primaryOrgan": "brain",
+      "description": "Acute neurological deficit due to cerebral ischemia (ischemic stroke) or hemorrhage (hemorrhagic stroke). Leading cause of disability worldwide."
+    },
+    "fh": {
+      "label": "Familial hypercholesterolemia",
+      "shortLabel": "FH",
+      "efoId": "EFO_0004911",
+      "color": "#A32D2D",
+      "primaryOrgan": "liver",
+      "description": "Inherited disorder of LDL clearance. LDLR, APOB, and PCSK9 variants account for most cases. Heterozygous FH affects 1 in 250."
+    }
+  }
+}

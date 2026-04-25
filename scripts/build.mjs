@@ -51,11 +51,25 @@ async function buildProteinViewer() {
   console.log('  → dist/protein-viewer/');
 }
 
+// HumanOS (Next.js, exported statically with basePath=/humanos).
+// build:static handles the API-route swap and runs `next build`; out/ is the
+// static-export directory. We copy out/ → dist/humanos/.
+async function buildHumanOS() {
+  header('Building humanos (Next.js static export)');
+  const tool = path.join(ROOT, 'humanos');
+  run('npm install --no-audit --no-fund', tool);
+  run('npm run build:static', tool);
+  const out = path.join(DIST, 'humanos');
+  await cp(path.join(tool, 'out'), out, { recursive: true });
+  console.log('  → dist/humanos/');
+}
+
 async function main() {
   await clean();
   await buildShell();
   await buildChromatinLens();
   await buildProteinViewer();
+  await buildHumanOS();
   console.log('\n\x1b[32m✓ Build complete.\x1b[0m  dist/ ready to deploy.');
 }
 
