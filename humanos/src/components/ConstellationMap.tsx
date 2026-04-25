@@ -79,7 +79,22 @@ export default function ConstellationMap({ selectedProtein }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [familyFilter, setFamilyFilter] = useState<GeneFamily | null>(null);
   const [topN, setTopN] = useState(Math.min(DEFAULT_TOP_N, all.length));
+  const [isMobile, setIsMobile] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => {
+      setIsMobile(mq.matches);
+      setShowControls(!mq.matches);
+      if (mq.matches) setTopN((n) => Math.min(n, 80));
+    };
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   // Always include the currently selected protein, even if it falls below the
   // top-N cutoff. Otherwise it'd vanish when you slide the cap down.
@@ -169,29 +184,41 @@ export default function ConstellationMap({ selectedProtein }: Props) {
 
   return (
     <div ref={containerRef} className="w-full text-white/85">
-      <div className="flex items-baseline justify-between mb-3 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between mb-3 gap-3">
         <div className="min-w-0">
-          <div className="text-[10px] tracking-[2.5px] text-cyan-300/70 font-medium uppercase">Constellation</div>
-          <div className="text-[24px] tracking-wide font-light mt-1">
+          <div className="flex items-center gap-2">
+            <div className="text-[10px] tracking-[2.5px] text-cyan-300/70 font-medium uppercase">Constellation</div>
+            <button
+              onClick={() => setShowControls((s) => !s)}
+              className="sm:hidden ml-auto rounded-full px-2.5 py-0.5 text-[10px] tracking-[1px] transition"
+              style={{
+                background: showControls ? 'rgba(45, 212, 191, 0.12)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${showControls ? 'rgba(45, 212, 191, 0.45)' : 'rgba(255,255,255,0.10)'}`,
+                color: showControls ? '#5eead4' : 'rgba(255,255,255,0.55)',
+              }}
+            >
+              Filters {showControls ? '●' : '○'}
+            </button>
+          </div>
+          <div className="text-[18px] sm:text-[24px] tracking-wide font-light mt-1">
             Top {positioned.length} of {all.length} proteins · 9 function classes
           </div>
-          <div className="text-[11px] text-white/45 mt-0.5">
+          <div className="text-[11px] text-white/45 mt-0.5 hidden sm:block">
             Star color = organ · radius = score · glow = pLDDT · pulse = variant burden · halo = drug target
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1.5">
+        <div className={`flex-col sm:items-end gap-1.5 ${showControls ? 'flex' : 'hidden sm:flex'}`}>
           <DensitySlider value={topN} max={all.length} onChange={setTopN} />
           <FamilyFilters families={families} active={familyFilter} onChange={setFamilyFilter} />
         </div>
       </div>
 
       <div
-        className="relative w-full rounded-2xl overflow-hidden"
+        className="relative w-full rounded-2xl overflow-hidden min-h-[360px] sm:min-h-[540px]"
         style={{
           background: 'radial-gradient(ellipse 80% 60% at 50% 50%, rgba(20, 184, 166, 0.05) 0%, rgba(7, 11, 32, 0) 70%)',
           border: '1px solid rgba(45, 212, 191, 0.15)',
           boxShadow: 'inset 0 0 60px rgba(45, 212, 191, 0.03)',
-          minHeight: 540,
         }}
       >
         <BackgroundStars />
@@ -263,7 +290,7 @@ export default function ConstellationMap({ selectedProtein }: Props) {
           ))}
         </svg>
 
-        {hovered && (
+        {hovered && !isMobile && (
           <HoverCard
             protein={positioned.find((p) => p.gene === hovered)!}
             container={containerRef.current}
@@ -413,7 +440,7 @@ function FamilyConnector({ from, to, active, dimmed }: { from: Positioned; to: P
 function DensitySlider({ value, max, onChange }: { value: number; max: number; onChange: (v: number) => void }) {
   const presets = [50, 100, 200, 400, 800, max];
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
       <span className="text-[9.5px] tracking-[1.5px] uppercase text-white/35">Show top</span>
       <input
         type="range"
@@ -422,10 +449,10 @@ function DensitySlider({ value, max, onChange }: { value: number; max: number; o
         step={1}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-32"
+        className="w-24 sm:w-32"
       />
       <span className="text-[11px] font-mono text-cyan-300/80 w-10 text-right">{value}</span>
-      <div className="flex gap-1 ml-1">
+      <div className="flex gap-1 ml-1 flex-wrap">
         {presets.map((n, i) => (
           <button
             key={i}
@@ -449,7 +476,7 @@ function DensitySlider({ value, max, onChange }: { value: number; max: number; o
 function FamilyFilters({ families, active, onChange }: { families: GeneFamily[]; active: GeneFamily | null; onChange: (f: GeneFamily | null) => void }) {
   if (families.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5 max-w-[60%] justify-end">
+    <div className="flex flex-wrap items-center gap-1.5 sm:max-w-[60%] sm:justify-end">
       <span className="text-[9.5px] tracking-[1.5px] uppercase text-white/35">Families:</span>
       {families.map((f) => {
         const isActive = active === f;
@@ -566,18 +593,18 @@ function BackgroundStars() {
 
 function Legend() {
   return (
-    <div className="mt-3 flex items-center justify-between text-[9.5px] tracking-[1.5px] text-white/40 uppercase">
+    <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[9.5px] tracking-[1.5px] text-white/40 uppercase">
       <div className="flex items-center gap-3 flex-wrap">
         <LegendDot color="#2dd4bf" label="High pLDDT (≥90)" />
         <LegendDot color="#a3e635" label="Confident (70-90)" />
         <LegendDot color="#facc15" label="Low (50-70)" />
         <LegendDot color="#f87171" label="Very low (<50)" />
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <span className="flex items-center gap-1">
           <span className="rounded-full" style={{ width: 9, height: 9, border: '1px dashed #2dd4bf' }} /> Drug target
         </span>
-        <span className="flex items-center gap-1">
+        <span className="hidden sm:flex items-center gap-1">
           <span className="text-cyan-300/60">⤴</span> Hover · click to load
         </span>
       </div>

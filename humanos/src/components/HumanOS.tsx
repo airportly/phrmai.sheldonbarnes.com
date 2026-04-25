@@ -47,7 +47,28 @@ export default function HumanOS() {
   const [viewMode, setViewMode] = useState<'body' | 'catalog' | 'constellation' | 'galaxy'>('body');
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [galaxyDiseaseFocus, setGalaxyDiseaseFocus] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   const gridRef = React.useRef<HTMLDivElement>(null);
+
+  // Default the side panels to hidden on mobile so the central view gets the
+  // whole viewport. The toggle still works to bring them back per session.
+  // Only forces the default on the first mobile-match per mount; the user can
+  // override by clicking the toggle.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    let appliedOnce = false;
+    const update = () => {
+      setIsMobile(mq.matches);
+      if (mq.matches && !appliedOnce) {
+        setPanelsVisible(false);
+        appliedOnce = true;
+      }
+    };
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   // Universal "select this protein" event so any deep-dive can offer a button
   // that routes back to the top-level selection state without prop drilling.
@@ -231,20 +252,20 @@ export default function HumanOS() {
   }, []);
 
   return (
-    <div className="bg-[#070b20] rounded-2xl px-7 pt-6 pb-7 relative overflow-hidden min-h-[820px] max-w-[1480px] mx-auto"
+    <div className="bg-[#070b20] rounded-2xl px-3 pt-4 pb-5 sm:px-7 sm:pt-6 sm:pb-7 relative overflow-hidden min-h-[640px] sm:min-h-[820px] max-w-[1480px] mx-auto"
          style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.4), inset 0 0 120px rgba(20,184,166,0.04)' }}>
       <BackgroundFX />
 
-      <header className="relative z-10 flex justify-between items-start mb-5">
-        <div>
+      <header className="relative z-10 flex flex-col md:flex-row md:justify-between md:items-start gap-3 mb-4 sm:mb-5">
+        <div className="min-w-0">
           <div className="text-[11px] tracking-[3.5px] text-white/40 font-light">TABLE OF CONTEXT</div>
-          <div className="text-[22px] tracking-[2px] text-white font-light mt-1 flex items-baseline gap-3">
+          <div className="text-[18px] sm:text-[22px] tracking-[2px] text-white font-light mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             DRUG DISCOVERY
             <span className="text-[10px] tracking-[2px] text-cyan-300/60 font-medium">CARDIOMETABOLIC v1.0</span>
           </div>
           <ScopeLine selectedOrgan={selectedOrgan} onClear={clearFilter} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap md:flex-nowrap md:justify-end">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <PanelsToggle value={panelsVisible} onChange={setPanelsVisible} />
           <ReasoningStatus reachable={aiReachable} />
@@ -256,20 +277,22 @@ export default function HumanOS() {
             appendChat={appendChat}
           />
           <VoicePanel onQuery={(q) => handleQuery(q, 'voice')} />
-          <button
-            onClick={() => setAutoRotate(!autoRotate)}
-            className="bg-white/5 border border-white/10 text-white/60 px-3 py-2 rounded-full text-[11px] tracking-wide hover:bg-white/10 transition"
-          >
-            Auto-rotate {autoRotate ? '●' : '○'}
-          </button>
+          {viewMode === 'body' && (
+            <button
+              onClick={() => setAutoRotate(!autoRotate)}
+              className="bg-white/5 border border-white/10 text-white/60 px-3 py-2 rounded-full text-[11px] tracking-wide hover:bg-white/10 transition"
+            >
+              Auto-rotate {autoRotate ? '●' : '○'}
+            </button>
+          )}
         </div>
       </header>
 
       <div
         ref={gridRef}
-        className={`relative z-10 grid gap-5 items-start ${panelsVisible ? 'grid-cols-[240px_1fr_240px]' : 'grid-cols-[1fr]'}`}
+        className={`relative z-10 grid gap-3 md:gap-5 items-start ${panelsVisible ? 'grid-cols-1 md:grid-cols-[200px_1fr_200px] lg:grid-cols-[240px_1fr_240px]' : 'grid-cols-[1fr]'}`}
       >
-        {viewMode === 'body' && panelsVisible && (
+        {viewMode === 'body' && panelsVisible && !isMobile && (
           <ConnectorLines
             containerRef={gridRef}
             bodyYRange={{ top: 0, bottom: 540 }}
@@ -278,7 +301,7 @@ export default function HumanOS() {
         {panelsVisible && (
           <ContextPanel side="left" protein={selectedProtein} onCardClick={setExpandedCard} />
         )}
-        <div className="flex flex-col items-center w-full min-h-[540px]">
+        <div className="flex flex-col items-center w-full min-h-[420px] sm:min-h-[540px]">
           {viewMode === 'body' ? (
             <>
               <HumanBody

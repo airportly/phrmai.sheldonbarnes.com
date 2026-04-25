@@ -67,6 +67,21 @@ export default function ProteinCatalog({ selectedProtein, onSelectProtein }: Pro
   const all = useMemo(() => getAllEnrichedProteins(), []);
   const [f, setF] = useState<FilterState>(emptyFilters);
   const [showFlow, setShowFlow] = useState(true);
+  const [showFilters, setShowFilters] = useState(true);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const apply = () => {
+      if (mq.matches) {
+        setShowFlow(false);
+        setShowFilters(false);
+      }
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
 
   const filtered = useMemo(() => {
     const q = f.search.trim().toLowerCase();
@@ -101,16 +116,27 @@ export default function ProteinCatalog({ selectedProtein, onSelectProtein }: Pro
     <div className="text-white/85 w-full">
       <div className="mb-4">
         <div className="text-[10px] tracking-[2.5px] text-cyan-300/70 font-medium uppercase">Catalog</div>
-        <div className="flex items-baseline justify-between mt-1">
-          <div>
-            <div className="text-[24px] tracking-wide font-light">All proteins</div>
+        <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between mt-1 gap-2">
+          <div className="min-w-0">
+            <div className="text-[18px] sm:text-[24px] tracking-wide font-light">All proteins</div>
             <div className="text-[11px] text-white/45 mt-0.5">
               {filteredCount === totalCount
                 ? `${totalCount} proteins · cardiometabolic v1.0`
                 : `${filteredCount} of ${totalCount} proteins · filtered`}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowFilters((s) => !s)}
+              className="sm:hidden rounded-full px-2.5 py-1 text-[10px] tracking-[1.5px] uppercase transition"
+              style={{
+                background: showFilters ? 'rgba(45, 212, 191, 0.10)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${showFilters ? 'rgba(45, 212, 191, 0.35)' : 'rgba(255,255,255,0.08)'}`,
+                color: showFilters ? '#5eead4' : 'rgba(255,255,255,0.55)',
+              }}
+            >
+              {showFilters ? '✓' : '○'} Filters
+            </button>
             <button
               onClick={() => setShowFlow((s) => !s)}
               className="rounded-full px-2.5 py-1 text-[10px] tracking-[1.5px] uppercase transition"
@@ -127,7 +153,7 @@ export default function ProteinCatalog({ selectedProtein, onSelectProtein }: Pro
               value={f.search}
               onChange={(e) => setF({ ...f, search: e.target.value })}
               placeholder="Search gene, accession, function…"
-              className="bg-white/5 border border-white/10 text-white placeholder-white/35 text-[12px] tracking-wide outline-none focus:border-cyan-500/50 rounded-full px-4 py-1.5 w-[260px]"
+              className="bg-white/5 border border-white/10 text-white placeholder-white/35 text-[12px] tracking-wide outline-none focus:border-cyan-500/50 rounded-full px-4 py-1.5 w-full sm:w-[260px]"
             />
           </div>
         </div>
@@ -139,7 +165,7 @@ export default function ProteinCatalog({ selectedProtein, onSelectProtein }: Pro
         </div>
       )}
 
-      <div className="space-y-2 mb-4">
+      <div className={`space-y-2 mb-4 ${showFilters ? 'block' : 'hidden sm:block'}`}>
         <FilterRow
           label="Function"
           options={FUNCTION_CLASSES.map((c) => ({ value: c, label: c }))}
@@ -213,7 +239,7 @@ export default function ProteinCatalog({ selectedProtein, onSelectProtein }: Pro
 
       <div className="rounded-xl overflow-hidden"
            style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)' }}>
-        <div className="grid grid-cols-[80px_1fr_120px_70px_70px_60px] gap-3 px-4 py-2.5 text-[9.5px] tracking-[2px] text-white/40 uppercase border-b border-white/5">
+        <div className="hidden sm:grid grid-cols-[80px_1fr_120px_70px_70px_60px] gap-3 px-4 py-2.5 text-[9.5px] tracking-[2px] text-white/40 uppercase border-b border-white/5">
           <div>Gene</div>
           <div>Function</div>
           <div>Organ · Family</div>
@@ -233,7 +259,7 @@ export default function ProteinCatalog({ selectedProtein, onSelectProtein }: Pro
               <button
                 key={`${p.gene}:${p.organ}`}
                 onClick={() => onSelectProtein(p)}
-                className="w-full text-left grid grid-cols-[80px_1fr_120px_70px_70px_60px] gap-3 items-center px-4 py-2 transition border-b border-white/3"
+                className="w-full text-left grid grid-cols-[1fr_auto] sm:grid-cols-[80px_1fr_120px_70px_70px_60px] gap-2 sm:gap-3 items-center px-3 sm:px-4 py-2 transition border-b border-white/3"
                 style={{
                   background: isSelected ? `${p.organColor}1A` : 'transparent',
                   borderLeftWidth: isSelected ? '2px' : '0',
@@ -241,33 +267,40 @@ export default function ProteinCatalog({ selectedProtein, onSelectProtein }: Pro
                   borderLeftStyle: 'solid',
                 }}
               >
-                <div>
-                  <div className="text-white text-[12.5px] font-medium tracking-wide">{p.gene}</div>
-                  <div className="text-[9.5px] text-white/35 font-mono">{p.uniprot}</div>
-                </div>
                 <div className="min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-white text-[12.5px] font-medium tracking-wide">{p.gene}</span>
+                    <span className="hidden sm:inline text-[9.5px] text-white/35 font-mono">{p.uniprot}</span>
+                  </div>
+                  <div className="text-[9.5px] text-white/35 font-mono sm:hidden">{p.uniprot}</div>
+                </div>
+                <div className="hidden sm:block min-w-0">
                   <div className="text-[12px] text-white/75 truncate">{p.name}</div>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <Pill text={p.functionClass} color="#94a3b8" />
                     {p.isDrugTarget && <Pill text="Drug target" color="#2dd4bf" />}
                   </div>
                 </div>
-                <div>
+                <div className="hidden sm:block">
                   <div className="flex items-center gap-1 text-[10.5px] text-white/55">
                     <span className="rounded-full" style={{ width: 5, height: 5, background: p.organColor }} />
                     {p.organLabel}
                   </div>
                   <div className="text-[9.5px] text-white/35 mt-0.5 truncate">{p.geneFamily.replace(/ \(.*$/, '')}</div>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex items-center gap-3 sm:block sm:gap-0">
+                  <div className="sm:hidden flex items-center gap-1 text-[10px] text-white/55">
+                    <span className="rounded-full" style={{ width: 5, height: 5, background: p.organColor }} />
+                    {p.organLabel}
+                  </div>
                   <div className="font-mono text-[12px] text-white/85">{p.score.toFixed(2)}</div>
                 </div>
-                <div className="text-right">
+                <div className="hidden sm:block text-right">
                   <div className="font-mono text-[12px]" style={{ color: plddtColor(p.plddtBand) }}>
                     {p.plddt != null ? p.plddt.toFixed(1) : '—'}
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="hidden sm:block text-right">
                   <div className="font-mono text-[12px] text-white/85">
                     {p.variantCount != null ? (p.variantCount >= 500 ? '500+' : p.variantCount.toString()) : '—'}
                   </div>

@@ -12,7 +12,7 @@ export default function Home() {
         <meta name="description" content="AI-powered clinical interface for cardiometabolic drug discovery" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <main className="min-h-screen bg-[#0a0e27] p-4">
+      <main className="min-h-screen bg-[#0a0e27] p-2 sm:p-4">
         <HumanOS />
         <footer className="mt-6 text-[10px] text-white/30 text-center max-w-5xl mx-auto leading-relaxed">
           <p>BodyParts3D, Copyright The Database Center for Life Science licensed by CC Attribution-Share Alike 2.1 Japan.</p>

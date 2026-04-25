@@ -56,7 +56,8 @@ const ORGAN_COLOR_BY_KEY: Record<string, number> = {
   adipose:  0xD4537E,
 };
 
-const HEIGHT = 580;
+const HEIGHT_DESKTOP = 580;
+const HEIGHT_MOBILE = 380;
 const CAMERA_FOV = 45;
 const OVERVIEW_TARGET = new THREE.Vector3(0, 0, 0);
 const OVERVIEW_DISTANCE = 1900;
@@ -78,6 +79,25 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
   const layout = useMemo(() => buildGalaxyLayout(), []);
   const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(new Set());
   const [focusInfo, setFocusInfo] = useState<{ kind: 'protein' | 'disease' | 'overview'; label: string; sub?: string }>({ kind: 'overview', label: 'Overview', sub: `${layout.proteins.length} proteins · 13 disease systems` });
+  const [isMobile, setIsMobile] = useState(false);
+  // On mobile we hide the floating HUDs (focus card, info card, layer chips,
+  // disease shortcuts) by default so the canvas gets the full viewport. The
+  // user can toggle them back via the "HUD" pill in the header.
+  const [showHUD, setShowHUD] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => {
+      setIsMobile(mq.matches);
+      setShowHUD(!mq.matches);
+    };
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  const HEIGHT = isMobile ? HEIGHT_MOBILE : HEIGHT_DESKTOP;
   // The "info card" is what shows in the top-left when something is focused.
   // It auto-dismisses after AUTO_DISMISS_MS, can be closed early via the X.
   const [infoFocus, setInfoFocus] = useState<{ kind: 'protein'; gene: string } | { kind: 'disease'; diseaseKey: string } | null>(null);
@@ -352,7 +372,7 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
       if (container.contains(labelRenderer.domElement)) container.removeChild(labelRenderer.domElement);
     };
-  }, [layout, onSelectProtein]);
+  }, [layout, onSelectProtein, HEIGHT]);
 
   // Sticky 3D-anchored label for the currently selected protein. Updates in
   // place when the selection changes; vanishes when nothing is selected.
@@ -480,16 +500,28 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
 
   return (
     <div className="w-full text-white/85">
-      <div className="mb-3 flex items-baseline justify-between gap-4">
-        <div>
+      <div className="mb-3 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3">
+        <div className="min-w-0">
           <div className="text-[10px] tracking-[2.5px] text-cyan-300/70 font-medium uppercase">Galaxy</div>
-          <div className="text-[24px] tracking-wide font-light mt-1">Protein universe</div>
+          <div className="text-[18px] sm:text-[24px] tracking-wide font-light mt-1">Protein universe</div>
           <div className="text-[11px] text-white/45 mt-0.5">
-            Drag to orbit · scroll to zoom · click any star or planet to fly there
+            Drag to orbit · pinch to zoom · tap any star or planet to fly there
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between sm:justify-end gap-2">
+          <button
+            onClick={() => setShowHUD((s) => !s)}
+            className="sm:hidden rounded-full px-2.5 py-1 text-[10px] tracking-[1px] transition"
+            style={{
+              background: showHUD ? 'rgba(45, 212, 191, 0.12)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${showHUD ? 'rgba(45, 212, 191, 0.45)' : 'rgba(255,255,255,0.10)'}`,
+              color: showHUD ? '#5eead4' : 'rgba(255,255,255,0.55)',
+            }}
+            title="Toggle the HUD overlay (focus card, layer chips, disease shortcuts)"
+          >
+            HUD {showHUD ? '●' : '○'}
+          </button>
+          <div className={`items-center gap-1.5 flex-wrap justify-end ${showHUD ? 'flex' : 'hidden sm:flex'}`}>
             {LAYERS.map((layer) => {
               const active = activeLayers.has(layer.key);
               return (
@@ -523,13 +555,13 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
         }}
       >
         {/* Info card: rich info on the focused protein or disease, dismissable */}
-        {infoFocus && !infoClosed && infoFocus.kind === 'protein' && layout.proteinByGene.has(infoFocus.gene) && (
+        {showHUD && infoFocus && !infoClosed && infoFocus.kind === 'protein' && layout.proteinByGene.has(infoFocus.gene) && (
           <ProteinInfoCard
             protein={layout.proteinByGene.get(infoFocus.gene)!}
             onClose={() => setInfoClosed(true)}
           />
         )}
-        {infoFocus && !infoClosed && infoFocus.kind === 'disease' && (
+        {showHUD && infoFocus && !infoClosed && infoFocus.kind === 'disease' && (
           <DiseaseInfoCard
             disease={layout.diseases.find((d) => d.key === infoFocus.diseaseKey)!}
             onClose={() => setInfoClosed(true)}
@@ -543,9 +575,9 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
             }}
           />
         )}
-        {(!infoFocus || infoClosed) && (
+        {showHUD && (!infoFocus || infoClosed) && (
           <div
-            className="absolute top-3 left-3 rounded-lg px-3 py-2 pointer-events-none max-w-[280px]"
+            className="absolute top-3 left-3 rounded-lg px-3 py-2 pointer-events-none max-w-[60%] sm:max-w-[280px]"
             style={{
               background: 'rgba(7, 11, 32, 0.85)',
               border: '1px solid rgba(255, 255, 255, 0.10)',
@@ -554,8 +586,8 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
             }}
           >
             <div className="text-[9px] tracking-[2px] text-white/45 uppercase">{focusInfo.kind}</div>
-            <div className="text-white text-[13px] tracking-wide font-medium mt-0.5">{focusInfo.label}</div>
-            {focusInfo.sub && <div className="text-[10.5px] text-white/55 mt-0.5">{focusInfo.sub}</div>}
+            <div className="text-white text-[13px] tracking-wide font-medium mt-0.5 truncate">{focusInfo.label}</div>
+            {focusInfo.sub && <div className="text-[10.5px] text-white/55 mt-0.5 truncate">{focusInfo.sub}</div>}
           </div>
         )}
 
@@ -578,6 +610,7 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
         )}
 
         {/* Direct-jump shortcuts to any disease system */}
+        {showHUD && (
         <div
           className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-1 pointer-events-auto"
           style={{ maxWidth: 'calc(100% - 24px)' }}
@@ -606,6 +639,7 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
             </button>
           ))}
         </div>
+        )}
       </div>
 
       <Legend layers={LAYERS} active={activeLayers} />
