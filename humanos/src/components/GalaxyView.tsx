@@ -29,6 +29,9 @@ interface Props {
   targetDiseaseKey?: string | null;
   /** Called when the user focuses a disease (clicked star or shortcut). */
   onDiseaseFocus?: (key: string | null) => void;
+  /** Optional narration sink. The tour pipes step text through this so it
+   *  appears in the chat log and is spoken via the existing voice path. */
+  onNarrate?: (line: string) => void;
 }
 
 type LayerKey = 'family' | 'drug' | 'organ' | 'function';
@@ -62,7 +65,7 @@ const CAMERA_FOV = 45;
 const OVERVIEW_TARGET = new THREE.Vector3(0, 0, 0);
 const OVERVIEW_DISTANCE = 1900;
 
-export default function GalaxyView({ selectedProtein, onSelectProtein, targetDiseaseKey, onDiseaseFocus }: Props) {
+export default function GalaxyView({ selectedProtein, onSelectProtein, targetDiseaseKey, onDiseaseFocus, onNarrate }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -77,8 +80,12 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
   const selectedLabelRef = useRef<CSS2DObject | null>(null);
 
   const layout = useMemo(() => buildGalaxyLayout(), []);
+  const tourScript = useMemo(() => buildTourScript(layout), [layout]);
   const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(new Set());
   const [focusInfo, setFocusInfo] = useState<{ kind: 'protein' | 'disease' | 'overview'; label: string; sub?: string }>({ kind: 'overview', label: 'Overview', sub: `${layout.proteins.length} proteins · 13 disease systems` });
+  const [tourRunning, setTourRunning] = useState(false);
+  const [tourStepIdx, setTourStepIdx] = useState(0);
+  const tourCancelRef = useRef(false);
   const [isMobile, setIsMobile] = useState(false);
   // On mobile we hide the floating HUDs (focus card, info card, layer chips,
   // disease shortcuts) by default so the canvas gets the full viewport. The
@@ -498,6 +505,99 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
     });
   }
 
+  // Tour runner. Walks the script step-by-step, narrating, flying, and
+  // toggling layers. Steps are scheduled with chained setTimeouts whose ids
+  // live in the cleanup queue so Stop is instant.
+  useEffect(() => {
+    if (!tourRunning) return;
+    tourCancelRef.current = false;
+    const timeouts: number[] = [];
+    const schedule = (fn: () => void, ms: number) => {
+      const id = window.setTimeout(() => {
+        if (!tourCancelRef.current) fn();
+      }, ms);
+      timeouts.push(id);
+    };
+
+    const runStep = (i: number) => {
+      if (tourCancelRef.current || i >= tourScript.length) {
+        if (!tourCancelRef.current) {
+          setTourRunning(false);
+          setTourStepIdx(0);
+        }
+        return;
+      }
+      const step = tourScript[i];
+      setTourStepIdx(i);
+      if (step.narration && onNarrate) onNarrate(step.narration);
+
+      switch (step.kind) {
+        case 'overview': {
+          flyTo(OVERVIEW_TARGET, OVERVIEW_DISTANCE);
+          setFocusInfo({
+            kind: 'overview',
+            label: 'Overview',
+            sub: `${layout.proteins.length} proteins · 13 disease systems`,
+          });
+          setInfoFocus(null);
+          onDiseaseFocus?.(null);
+          break;
+        }
+        case 'visit-disease': {
+          const d = layout.diseases.find((x) => x.key === step.diseaseKey);
+          if (d) {
+            flyTo(new THREE.Vector3(...d.position), 220);
+            setFocusInfo({ kind: 'disease', label: d.label, sub: `${d.proteinCount} proteins · ${d.shortLabel}` });
+            setInfoFocus({ kind: 'disease', diseaseKey: d.key });
+            onDiseaseFocus?.(d.key);
+          }
+          break;
+        }
+        case 'visit-protein': {
+          const p = layout.proteinByGene.get(step.gene);
+          if (p) {
+            flyTo(new THREE.Vector3(...p.position), 80);
+            setFocusInfo({ kind: 'protein', label: p.gene, sub: `${p.diseaseLabel} · score ${p.score.toFixed(2)}` });
+            setInfoFocus({ kind: 'protein', gene: p.gene });
+            // Bubble the selection up so the side panels refresh too.
+            onSelectProtein(p.gene);
+          }
+          break;
+        }
+        case 'set-layers': {
+          setActiveLayers(new Set(step.layers));
+          break;
+        }
+      }
+
+      schedule(() => runStep(i + 1), step.durationMs);
+    };
+
+    runStep(0);
+
+    return () => {
+      tourCancelRef.current = true;
+      timeouts.forEach((id) => window.clearTimeout(id));
+    };
+    // The script and the layout are stable for a session; the rest of the
+    // setters are referentially stable. Re-running this effect on every
+    // render would yank the camera mid-tour, so we deliberately depend only
+    // on `tourRunning`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourRunning]);
+
+  function startTour() {
+    setTourStepIdx(0);
+    setTourRunning(true);
+  }
+  function stopTour() {
+    tourCancelRef.current = true;
+    setTourRunning(false);
+    setTourStepIdx(0);
+    setActiveLayers(new Set());
+    returnToOverview();
+  }
+
   return (
     <div className="w-full text-white/85">
       <div className="mb-3 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3">
@@ -508,7 +608,22 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
             Drag to orbit · pinch to zoom · tap any star or planet to fly there
           </div>
         </div>
-        <div className="flex items-center justify-between sm:justify-end gap-2">
+        <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap">
+          <button
+            onClick={tourRunning ? stopTour : startTour}
+            className="rounded-full px-2.5 py-1 text-[10px] tracking-[1.5px] uppercase transition flex items-center gap-1.5"
+            style={{
+              background: tourRunning ? 'rgba(248, 113, 113, 0.15)' : 'rgba(127, 119, 221, 0.12)',
+              border: `1px solid ${tourRunning ? 'rgba(248, 113, 113, 0.40)' : 'rgba(127, 119, 221, 0.45)'}`,
+              color: tourRunning ? '#fca5a5' : '#a3a1ed',
+            }}
+            title={tourRunning ? 'Stop the galaxy tour' : 'Take the guided tour of the protein galaxy'}
+          >
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor">
+              {tourRunning ? <rect x="2" y="2" width="8" height="8" rx="1" /> : <polygon points="2,1 11,6 2,11" />}
+            </svg>
+            {tourRunning ? `Stop · ${tourStepIdx + 1}/${tourScript.length}` : 'Tour'}
+          </button>
           <button
             onClick={() => setShowHUD((s) => !s)}
             className="sm:hidden rounded-full px-2.5 py-1 text-[10px] tracking-[1px] transition"
@@ -528,13 +643,14 @@ export default function GalaxyView({ selectedProtein, onSelectProtein, targetDis
                 <button
                   key={layer.key}
                   onClick={() => toggleLayer(layer.key)}
-                  className="rounded-full px-2.5 py-0.5 text-[10px] tracking-[1px] transition"
+                  disabled={tourRunning}
+                  className="rounded-full px-2.5 py-0.5 text-[10px] tracking-[1px] transition disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{
                     background: active ? `${layer.color}1F` : 'rgba(255,255,255,0.04)',
                     border: `1px solid ${active ? layer.color : 'rgba(255,255,255,0.10)'}`,
                     color: active ? layer.color : 'rgba(255,255,255,0.55)',
                   }}
-                  title={layer.description}
+                  title={tourRunning ? 'Layer toggles are driven by the tour right now' : layer.description}
                 >
                   {layer.label}
                 </button>
@@ -1022,4 +1138,170 @@ function LegendDot({ color, label }: { color: string; label: string }) {
       {label}
     </span>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Tour
+// ---------------------------------------------------------------------------
+
+type TourStep =
+  | { kind: 'overview'; durationMs: number; narration?: string }
+  | { kind: 'visit-disease'; diseaseKey: string; durationMs: number; narration?: string }
+  | { kind: 'visit-protein'; gene: string; durationMs: number; narration?: string }
+  | { kind: 'set-layers'; layers: LayerKey[]; durationMs: number; narration?: string };
+
+function buildTourScript(layout: ReturnType<typeof buildGalaxyLayout>): TourStep[] {
+  const steps: TourStep[] = [];
+
+  // Helper: top-N proteins for a disease, by association score.
+  const topProteinsFor = (key: string, n = 1): ProteinNode[] =>
+    layout.proteins
+      .filter((p) => p.diseaseKey === key)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n);
+
+  // Cross-system gene-family pair: a gene family with members in two
+  // different diseases. Pick the highest-score representative from each of
+  // the two diseases. This is the "follow a link across the galaxy" beat.
+  const familyMembers = new Map<string, ProteinNode[]>();
+  for (const p of layout.proteins) {
+    if (p.geneFamily === 'Other') continue;
+    const arr = familyMembers.get(p.geneFamily) ?? [];
+    arr.push(p);
+    familyMembers.set(p.geneFamily, arr);
+  }
+  let crossPair: { a: ProteinNode; b: ProteinNode; family: string } | null = null;
+  for (const [family, members] of familyMembers.entries()) {
+    const byDisease = new Map<string, ProteinNode[]>();
+    for (const m of members) {
+      const arr = byDisease.get(m.diseaseKey) ?? [];
+      arr.push(m);
+      byDisease.set(m.diseaseKey, arr);
+    }
+    if (byDisease.size < 2) continue;
+    // Pick the two diseases whose strongest member sums to the highest
+    // combined score — keeps the demo on well-evidenced links.
+    const reps = [...byDisease.entries()]
+      .map(([, arr]) => arr.sort((x, y) => y.score - x.score)[0])
+      .sort((x, y) => y.score - x.score);
+    const candidate = { a: reps[0], b: reps[1], family };
+    if (!crossPair || candidate.a.score + candidate.b.score > crossPair.a.score + crossPair.b.score) {
+      crossPair = candidate;
+    }
+  }
+
+  // Top three diseases by associated-protein count.
+  const topDiseases = [...layout.diseases]
+    .sort((a, b) => b.proteinCount - a.proteinCount)
+    .slice(0, 3);
+
+  // Step 1: overview / orientation.
+  steps.push({
+    kind: 'overview',
+    durationMs: 9000,
+    narration:
+      'Welcome to the protein galaxy. Thirteen cardiometabolic disease stars form a ring; their associated proteins orbit each star. Distance from the star reflects OpenTargets evidence — closer means stronger association. Color encodes the protein\'s primary organ.',
+  });
+
+  // Step 2: ring sweep — quick fly-through every disease so the user sees
+  // them all named once. ~1.6s per disease, no per-disease narration to keep
+  // it visually fluid.
+  steps.push({
+    kind: 'overview',
+    durationMs: 4000,
+    narration: 'First, a quick sweep of all thirteen disease systems.',
+  });
+  for (const d of layout.diseases) {
+    steps.push({
+      kind: 'visit-disease',
+      diseaseKey: d.key,
+      durationMs: 1700,
+    });
+  }
+
+  // Step 3: deep dive into the top three by protein count.
+  topDiseases.forEach((d, i) => {
+    steps.push({
+      kind: 'visit-disease',
+      diseaseKey: d.key,
+      durationMs: 4500,
+      narration:
+        i === 0
+          ? `Top of the list by protein count: ${d.label}, with ${d.proteinCount} associated proteins. The closest planets carry the strongest evidence.`
+          : `${d.label}. ${d.proteinCount} proteins in this system.`,
+    });
+    const top = topProteinsFor(d.key, 1)[0];
+    if (top) {
+      steps.push({
+        kind: 'visit-protein',
+        gene: top.gene,
+        durationMs: 6500,
+        narration:
+          `${top.gene} sits closest to ${d.shortLabel} because its association score is ${top.score.toFixed(2)} — the highest in this system. ` +
+          `It's coloured for ${top.organLabel.toLowerCase()} because that's where it's primarily expressed${top.isDrugTarget ? ', and the dashed halo marks it as a drug target' : ''}.`,
+      });
+    }
+  });
+
+  // Step 4: layer demos. Each one toggles ON, holds, then the next step
+  // replaces the layer set. Ends with gene-family ON for the cross-link demo.
+  steps.push({
+    kind: 'set-layers',
+    layers: ['organ'],
+    durationMs: 6000,
+    narration:
+      'Turning on the same-organ layer. Lines now connect proteins that share an organ — useful for spotting tissue-specific clusters that span multiple diseases.',
+  });
+  steps.push({
+    kind: 'set-layers',
+    layers: ['function'],
+    durationMs: 6000,
+    narration:
+      'Function class: ion channels link to ion channels, kinases to kinases. The same molecular role surfaces across unrelated diseases.',
+  });
+  steps.push({
+    kind: 'set-layers',
+    layers: ['drug'],
+    durationMs: 5000,
+    narration:
+      'Drug targets — the pharmacologically actionable proteins. The chains track the closest drug-target neighbours, which is where drug-repurposing ideas tend to live.',
+  });
+  steps.push({
+    kind: 'set-layers',
+    layers: ['family'],
+    durationMs: 5000,
+    narration:
+      'Gene family — APO, KCN, SCN, F, HNF and friends. Siblings often live in different disease systems; these are the structural cousins.',
+  });
+
+  // Step 5: cross-system link traversal along a real gene-family edge.
+  if (crossPair) {
+    const { a, b, family } = crossPair;
+    const familyShort = family.replace(/ \(.*$/, '');
+    steps.push({
+      kind: 'visit-protein',
+      gene: a.gene,
+      durationMs: 5000,
+      narration:
+        `Following one of those gene-family links now. ${a.gene} sits in ${a.diseaseLabel} — a ${familyShort} family member.`,
+    });
+    steps.push({
+      kind: 'visit-protein',
+      gene: b.gene,
+      durationMs: 7000,
+      narration:
+        `Across the galaxy: ${b.gene} in ${b.diseaseLabel}. Same ${familyShort} family. Different disease, shared structural backbone — that's the thread the family layer is tracing.`,
+    });
+  }
+
+  // Step 6: outro / hand-off back to free explore.
+  steps.push({
+    kind: 'set-layers',
+    layers: [],
+    durationMs: 6000,
+    narration:
+      'End of tour. Toggle any layer, click any star or planet to fly there, or ask the chat for a deep dive on what you see.',
+  });
+
+  return steps;
 }

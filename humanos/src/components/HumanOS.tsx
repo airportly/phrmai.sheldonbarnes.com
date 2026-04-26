@@ -350,6 +350,7 @@ export default function HumanOS() {
               }}
               targetDiseaseKey={galaxyDiseaseFocus}
               onDiseaseFocus={setGalaxyDiseaseFocus}
+              onNarrate={appendChat}
             />
           )}
         </div>
