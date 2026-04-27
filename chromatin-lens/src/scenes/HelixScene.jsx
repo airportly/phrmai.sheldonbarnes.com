@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { Line } from '@react-three/drei';
 import { DNA_SEQUENCE, COMPLEMENT } from '../data/locus';
@@ -29,11 +29,37 @@ const BASE_INFO_ID = {
 const sel = (selectedInfo, id, base, boosted) =>
   selectedInfo === id ? boosted : base;
 
-function BasePair({ index, base, position, opacity, onSelect, selectedInfo }) {
+// Y-fork splay: below the fork, the two parent strands physically separate.
+// `splayOffset` is the X-offset (forward bends +X, reverse −X). `windingFactor`
+// shrinks the helical radius toward 0 below the fork so the strands stop
+// winding around the central axis and instead become straight templates with
+// their daughter strands coiling around them. Without the unwinding part, the
+// X-shifted helices still cross periodically and don't read as a Y.
+const SPLAY_RAMP = 1.5;
+const SPLAY_MAX = 1.1;
+function splayOffset(y, forkY) {
+  if (forkY === null || y >= forkY) return 0;
+  const t = Math.min(1, (forkY - y) / SPLAY_RAMP);
+  const eased = 1 - (1 - t) * (1 - t); // easeOutQuad
+  return eased * SPLAY_MAX;
+}
+function windingFactor(y, forkY) {
+  if (forkY === null || y >= forkY) return 1;
+  const t = Math.min(1, (forkY - y) / SPLAY_RAMP);
+  const eased = 1 - (1 - t) * (1 - t);
+  return 1 - eased; // 1 above fork, → 0 far below
+}
+
+function BasePair({ index, base, position, opacity, onSelect, selectedInfo, replicated = false }) {
   const comp = COMPLEMENT[base];
   const angle = (index / BP_PER_TURN) * Math.PI * 2;
   const baseId = BASE_INFO_ID[base];
   const compId = BASE_INFO_ID[comp];
+
+  // Below the fork, the H-bond rung is broken and each base now templates a
+  // daughter strand — hide the cross-helix pair entirely so the splayed
+  // parent backbones read as separated.
+  if (replicated) return null;
 
   return (
     <group position={position} rotation={[0, angle, 0]}>
@@ -87,7 +113,8 @@ function ReplicationOverlay({ progress, numBases, totalHeight, opacity, onSelect
   const botY = -totalHeight / 2;
   const forkY = botY + (topY - botY) * progress;
 
-  // Leading strand — continuous tube hugging the REVERSE template, below fork
+  // Leading strand — continuous tube hugging the REVERSE template, below fork.
+  // Splay X-offset matches the parent reverse strand (bends −X).
   const samplesPerBp = 4;
   const leadingPts = [];
   for (let i = 0; i <= numBases * samplesPerBp; i++) {
@@ -96,10 +123,11 @@ function ReplicationOverlay({ progress, numBases, totalHeight, opacity, onSelect
     if (y > forkY) break;
     const angle = (bpIdx / BP_PER_TURN) * Math.PI * 2 + Math.PI; // reverse side
     const r = HELIX_RADIUS * 1.22;
-    leadingPts.push([Math.cos(angle) * r, y, Math.sin(angle) * r]);
+    const dx = -splayOffset(y, forkY);
+    leadingPts.push([Math.cos(angle) * r + dx, y, Math.sin(angle) * r]);
   }
 
-  // Lagging strand — Okazaki fragments hugging the FORWARD template
+  // Lagging strand — Okazaki fragments hugging the FORWARD template (bends +X).
   const OKAZAKI_BP = 8;
   const laggingFragments = [];
   for (let start = 0; start < numBases; start += OKAZAKI_BP) {
@@ -113,7 +141,8 @@ function ReplicationOverlay({ progress, numBases, totalHeight, opacity, onSelect
       const y = bpIdx * BP_RISE - totalHeight / 2;
       const angle = (bpIdx / BP_PER_TURN) * Math.PI * 2;
       const r = HELIX_RADIUS * 1.22;
-      pts.push([Math.cos(angle) * r, y, Math.sin(angle) * r]);
+      const dx = splayOffset(y, forkY);
+      pts.push([Math.cos(angle) * r + dx, y, Math.sin(angle) * r]);
     }
     laggingFragments.push(pts);
   }
@@ -413,6 +442,14 @@ export default function HelixScene({
   const bases = DNA_SEQUENCE.split('');
   const totalHeight = bases.length * BP_RISE;
 
+  const topY = totalHeight / 2;
+  const botY = -totalHeight / 2;
+  const fwdAngleTop = ((bases.length - 1) / BP_PER_TURN) * Math.PI * 2;
+
+  // forkY moves with replicationProgress; below it the parent strands splay
+  // outward (Y-fork) and the rungs/bases are gone.
+  const forkY = replicationProgress > 0 ? botY + (topY - botY) * replicationProgress : null;
+
   const { forwardGeometry, reverseGeometry } = useMemo(() => {
     const forwardPts = [];
     const reversePts = [];
@@ -422,15 +459,17 @@ export default function HelixScene({
       const bpIdx = i / samplesPerBp;
       const angle = (bpIdx / BP_PER_TURN) * Math.PI * 2;
       const y = bpIdx * BP_RISE - totalHeight / 2;
+      const dx = splayOffset(y, forkY);
+      const w = windingFactor(y, forkY);
       forwardPts.push(new THREE.Vector3(
-        Math.cos(angle) * HELIX_RADIUS,
+        Math.cos(angle) * HELIX_RADIUS * w + dx,
         y,
-        Math.sin(angle) * HELIX_RADIUS
+        Math.sin(angle) * HELIX_RADIUS * w
       ));
       reversePts.push(new THREE.Vector3(
-        Math.cos(angle + Math.PI) * HELIX_RADIUS,
+        Math.cos(angle + Math.PI) * HELIX_RADIUS * w - dx,
         y,
-        Math.sin(angle + Math.PI) * HELIX_RADIUS
+        Math.sin(angle + Math.PI) * HELIX_RADIUS * w
       ));
     }
     const fwdCurve = new THREE.CatmullRomCurve3(forwardPts, false);
@@ -439,11 +478,16 @@ export default function HelixScene({
       forwardGeometry: new THREE.TubeGeometry(fwdCurve, totalSamples, 0.12, 8, false),
       reverseGeometry: new THREE.TubeGeometry(revCurve, totalSamples, 0.12, 8, false)
     };
-  }, [bases.length, totalHeight]);
+  }, [bases.length, totalHeight, forkY]);
 
-  const topY = totalHeight / 2;
-  const botY = -totalHeight / 2;
-  const fwdAngleTop = ((bases.length - 1) / BP_PER_TURN) * Math.PI * 2;
+  // Dispose previous tube geometries when forkY animates — otherwise the
+  // per-frame rebuilds leak GPU buffers.
+  useEffect(() => {
+    return () => {
+      forwardGeometry.dispose();
+      reverseGeometry.dispose();
+    };
+  }, [forwardGeometry, reverseGeometry]);
 
   return (
     <group>
@@ -474,17 +518,22 @@ export default function HelixScene({
         </mesh>
       </Selectable>
 
-      {bases.map((base, i) => (
-        <BasePair
-          key={i}
-          index={i}
-          base={base}
-          position={[0, i * BP_RISE - totalHeight / 2, 0]}
-          opacity={opacity}
-          onSelect={onSelect}
-          selectedInfo={selectedInfo}
-        />
-      ))}
+      {bases.map((base, i) => {
+        const y = i * BP_RISE - totalHeight / 2;
+        const replicated = forkY !== null && y < forkY;
+        return (
+          <BasePair
+            key={i}
+            index={i}
+            base={base}
+            position={[0, y, 0]}
+            opacity={opacity}
+            onSelect={onSelect}
+            selectedInfo={selectedInfo}
+            replicated={replicated}
+          />
+        );
+      })}
 
       <Label
         position={[Math.cos(fwdAngleTop) * HELIX_RADIUS * 1.4, topY + 0.3, Math.sin(fwdAngleTop) * HELIX_RADIUS * 1.4]}

@@ -64,12 +64,26 @@ async function buildHumanOS() {
   console.log('  → dist/humanos/');
 }
 
+// Discovery (Vite) — narrated AI discovery report. Same packaging shape as
+// chromatin-lens: base=/discovery/, builds to discovery/dist, copied to
+// dist/discovery/.
+async function buildDiscovery() {
+  header('Building discovery (Vite + React, narrated discovery report)');
+  const tool = path.join(ROOT, 'discovery');
+  run('npm install --no-audit --no-fund', tool);
+  run('npm run build', tool);
+  const out = path.join(DIST, 'discovery');
+  await cp(path.join(tool, 'dist'), out, { recursive: true });
+  console.log('  → dist/discovery/');
+}
+
 async function main() {
   await clean();
   await buildShell();
   await buildChromatinLens();
   await buildProteinViewer();
   await buildHumanOS();
+  await buildDiscovery();
   console.log('\n\x1b[32m✓ Build complete.\x1b[0m  dist/ ready to deploy.');
 }
 

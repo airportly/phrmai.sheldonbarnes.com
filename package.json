@@ -5,11 +5,12 @@
   "description": "PHRMAI — pharma-AI interactive tools, on the road to HumanOS. Hosted at phrmai.sheldonbarnes.com.",
   "type": "module",
   "scripts": {
-    "dev": "npm run install:all && concurrently --kill-others-on-fail --names shell,chromatin-lens,protein-viewer,humanos --prefix-colors cyan,magenta,green,yellow \"npm:dev:shell\" \"npm:dev:chromatin-lens\" \"npm:dev:protein-viewer\" \"npm:dev:humanos\"",
+    "dev": "npm run install:all && concurrently --kill-others-on-fail --names shell,chromatin-lens,protein-viewer,humanos,discovery --prefix-colors cyan,magenta,green,yellow,blue \"npm:dev:shell\" \"npm:dev:chromatin-lens\" \"npm:dev:protein-viewer\" \"npm:dev:humanos\" \"npm:dev:discovery\"",
     "dev:shell": "cd shell && npm run dev",
     "dev:chromatin-lens": "cd chromatin-lens && npm run dev",
     "dev:protein-viewer": "npx --yes http-server protein-viewer -p 5174 -c-1 --cors",
     "dev:humanos": "cd humanos && NEXT_PUBLIC_BASE_PATH=/humanos npm run dev",
+    "dev:discovery": "cd discovery && npm run dev",
     "install:all": "node scripts/install-all.mjs",
     "icons": "node scripts/render-icons.mjs",
     "build": "node scripts/build.mjs",

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
-const PROJECTS = ['shell', 'chromatin-lens'];
+const PROJECTS = ['shell', 'chromatin-lens', 'discovery'];
 
 for (const p of PROJECTS) {
   const dir = path.join(ROOT, p);

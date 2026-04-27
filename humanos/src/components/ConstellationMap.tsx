@@ -82,6 +82,94 @@ export default function ConstellationMap({ selectedProtein }: Props) {
   const [isMobile, setIsMobile] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  // viewBox state for zoom + pan. The SVG's intrinsic coordinate system is
+  // VIEW_W x VIEW_H; we shrink the viewBox to zoom in and translate it to pan.
+  // Min zoom is 1.0 (full view); max is 6x.
+  const [view, setView] = useState({ x: 0, y: 0, w: VIEW_W, h: VIEW_H });
+  const dragRef = useRef<{ startX: number; startY: number; vx: number; vy: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 6;
+  const zoom = VIEW_W / view.w;
+
+  function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
+
+  function applyZoom(factor: number, clientX?: number, clientY?: number) {
+    setView((v) => {
+      const newZoom = clamp((VIEW_W / v.w) * factor, ZOOM_MIN, ZOOM_MAX);
+      const newW = VIEW_W / newZoom;
+      const newH = VIEW_H / newZoom;
+      let anchor = { x: v.x + v.w / 2, y: v.y + v.h / 2 };
+      if (clientX != null && clientY != null && svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect();
+        const fx = (clientX - rect.left) / rect.width;
+        const fy = (clientY - rect.top) / rect.height;
+        anchor = { x: v.x + fx * v.w, y: v.y + fy * v.h };
+      }
+      // Keep anchor under the same screen position after the zoom.
+      const fx = (anchor.x - v.x) / v.w;
+      const fy = (anchor.y - v.y) / v.h;
+      const newX = anchor.x - fx * newW;
+      const newY = anchor.y - fy * newH;
+      return {
+        x: clamp(newX, -newW * 0.25, VIEW_W - newW * 0.75),
+        y: clamp(newY, -newH * 0.25, VIEW_H - newH * 0.75),
+        w: newW,
+        h: newH,
+      };
+    });
+  }
+
+  function resetView() { setView({ x: 0, y: 0, w: VIEW_W, h: VIEW_H }); }
+
+  // Native wheel listener so we can preventDefault (React's onWheel is passive
+  // in modern browsers, so calling preventDefault from there has no effect and
+  // page-scroll fights the zoom).
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      applyZoom(factor, e.clientX, e.clientY);
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', onWheel);
+    // applyZoom closes over `view` via setView callback form, no dep needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function onPointerDown(e: React.PointerEvent<SVGSVGElement>) {
+    // Only start a pan when the user grabs empty space — clicks on stars
+    // should still select. We detect this by checking if the target is the
+    // SVG itself or a non-interactive layer.
+    const target = e.target as Element;
+    if (target.closest('[data-star="1"]')) return;
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    dragRef.current = { startX: e.clientX, startY: e.clientY, vx: view.x, vy: view.y };
+    setIsDragging(true);
+  }
+  function onPointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    const d = dragRef.current;
+    if (!d || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const dxClient = e.clientX - d.startX;
+    const dyClient = e.clientY - d.startY;
+    const dxSvg = (dxClient / rect.width) * view.w;
+    const dySvg = (dyClient / rect.height) * view.h;
+    setView((v) => ({
+      ...v,
+      x: clamp(d.vx - dxSvg, -v.w * 0.25, VIEW_W - v.w * 0.75),
+      y: clamp(d.vy - dySvg, -v.h * 0.25, VIEW_H - v.h * 0.75),
+    }));
+  }
+  function onPointerUp(e: React.PointerEvent<SVGSVGElement>) {
+    dragRef.current = null;
+    setIsDragging(false);
+    try { (e.currentTarget as Element).releasePointerCapture(e.pointerId); } catch { /* no-op */ }
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -223,9 +311,19 @@ export default function ConstellationMap({ selectedProtein }: Props) {
       >
         <BackgroundStars />
         <svg
-          viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-          className="block w-full h-auto"
-          style={{ maxHeight: '60vh' }}
+          ref={svgRef}
+          viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
+          className="block w-full h-auto select-none"
+          style={{
+            maxHeight: '60vh',
+            cursor: isDragging ? 'grabbing' : zoom > 1.01 ? 'grab' : 'default',
+            touchAction: 'none',
+          }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onDoubleClick={resetView}
         >
           <defs>
             <filter id="star-glow" x="-200%" y="-200%" width="500%" height="500%">
@@ -296,6 +394,35 @@ export default function ConstellationMap({ selectedProtein }: Props) {
             container={containerRef.current}
           />
         )}
+
+        <div
+          className="absolute bottom-3 right-3 flex flex-col gap-1 rounded-lg p-1"
+          style={{
+            background: 'rgba(7, 11, 32, 0.78)',
+            border: '1px solid rgba(255, 255, 255, 0.10)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+          }}
+        >
+          <button
+            onClick={() => applyZoom(1.4)}
+            disabled={zoom >= ZOOM_MAX - 0.001}
+            className="w-7 h-7 rounded text-white/70 text-[14px] leading-none hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition"
+            title="Zoom in (or scroll wheel)"
+          >+</button>
+          <button
+            onClick={() => applyZoom(1 / 1.4)}
+            disabled={zoom <= ZOOM_MIN + 0.001}
+            className="w-7 h-7 rounded text-white/70 text-[14px] leading-none hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition"
+            title="Zoom out"
+          >−</button>
+          <button
+            onClick={resetView}
+            disabled={zoom <= ZOOM_MIN + 0.001 && view.x === 0 && view.y === 0}
+            className="w-7 h-7 rounded text-white/55 text-[9px] tracking-wider hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition"
+            title="Reset view (or double-click)"
+          >FIT</button>
+        </div>
       </div>
 
       <Legend />
@@ -331,6 +458,7 @@ function ProteinStar({
 
   return (
     <g
+      data-star="1"
       style={{ cursor: 'pointer', opacity, transition: 'opacity 0.25s' }}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}

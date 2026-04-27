@@ -26,6 +26,11 @@ export default defineConfig({
       '/protein-viewer': {
         target: 'http://localhost:5174',
         changeOrigin: true
+      },
+      '/discovery': {
+        target: 'http://localhost:5175',
+        changeOrigin: true,
+        ws: true
       }
     }
   },

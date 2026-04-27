@@ -49,6 +49,21 @@ export const APPS = [
     status: 'live'
   },
   {
+    id: 'discovery',
+    name: 'Discovery',
+    tagline: 'Self-narrating AI discovery report',
+    description:
+      'A guided walkthrough of what AI uncovered about LTK and MOK — glycine flexibility, semantic disease clustering, ATP-pocket selectivity, conservation, dynamics, and the therapeutic implications. Click Tour and let it speak for itself.',
+    path: '/discovery/',
+    tags: ['Tour', 'LTK', 'MOK', 'Discovery report', 'Narrated'],
+    stack: ['Vite', 'React', 'Web Speech API'],
+    accent: '#a78bfa',
+    accent2: '#fbbf24',
+    glyph: 'sdk',
+    version: 'v0.1',
+    status: 'live'
+  },
+  {
     id: 'phrmai-sdk',
     name: 'PHRMAI SDK',
     tagline: 'Build your own PHRMAI tools',

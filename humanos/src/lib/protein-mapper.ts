@@ -52,7 +52,7 @@ class ProteinMapper {
         plddt: p.plddt,
         score: p.score,
         notes: p.notes,
-        disease: data.diseases[0],
+        disease: p.disease ?? data.diseases[0],
       })),
     };
   }
@@ -69,16 +69,77 @@ class ProteinMapper {
     return this.getOrganData(organ)?.color ?? '#2dd4bf';
   }
   
+  /**
+   * Resolve a free-form query (a chat message, a voice transcript) to a
+   * specific protein. Strategy is layered, strictest first:
+   *
+   *   1. Exact gene-symbol token (word-boundary). "Tell me about PCSK9" hits
+   *      PCSK9; "interesting" does NOT hit INS just because it contains
+   *      "ins".
+   *   2. Exact protein-name token. "Insulin" → INS, "myostatin" → MSTN.
+   *   3. Common-name aliases for proteins whose colloquial name doesn't match
+   *      either the gene symbol or the canonical protein name in the data.
+   *   4. Loose contains-match on gene symbol (last resort, kept for
+   *      back-compat with prior behavior).
+   *
+   * Among ties, the highest OpenTargets association score wins so an unambiguous
+   * "insulin" picks the Insulin entry, not Insulin-degrading enzyme.
+   */
   findProteinByQuery(query: string): Protein | null {
     const normalized = query.toLowerCase().trim();
-    
+    if (!normalized) return null;
+    const tokens = new Set(normalized.split(/[^a-z0-9]+/i).filter(Boolean));
+
+    const all: Protein[] = [];
     for (const organKey of Object.keys(this.data.organs) as OrganKey[]) {
-      const proteins = this.getProteinsByOrgan(organKey);
-      for (const p of proteins) {
-        if (normalized.includes(p.gene.toLowerCase())) {
-          return p;
-        }
+      all.push(...this.getProteinsByOrgan(organKey));
+    }
+
+    const pickBest = (matches: Protein[]) =>
+      matches.length === 0 ? null : matches.reduce((a, b) => (b.score > a.score ? b : a));
+
+    // Tier 1: exact gene-symbol token match.
+    const t1 = all.filter((p) => tokens.has(p.gene.toLowerCase()));
+    if (t1.length) return pickBest(t1);
+
+    // Tier 2: exact protein-name token match (e.g. "insulin" matches the
+    // protein literally named "Insulin"). We tokenize the protein name too
+    // and check for an intersection with the query tokens.
+    const t2 = all.filter((p) => {
+      const nameTokens = (p.name ?? '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+      // Single-word protein names: require equality with one of the query
+      // tokens so "insulin" hits INS but not "Insulin-degrading enzyme".
+      if (nameTokens.length === 1) return tokens.has(nameTokens[0]);
+      // Multi-word names: require that the FULL query phrase appears (so
+      // "insulin receptor" hits INSR but bare "insulin" does not).
+      const phrase = (p.name ?? '').toLowerCase();
+      return phrase && normalized.includes(phrase);
+    });
+    if (t2.length) return pickBest(t2);
+
+    // Tier 3: common-name aliases that don't appear in the data. Maps the
+    // colloquial term to the canonical gene symbol.
+    const aliases: Record<string, string> = {
+      insulin: 'INS',
+      leptin: 'LEP',
+      adiponectin: 'ADIPOQ',
+      glucagon: 'GCG',
+      'beta-amyloid': 'APP',
+      amyloid: 'APP',
+    };
+    for (const token of tokens) {
+      const sym = aliases[token];
+      if (sym) {
+        const hit = all.find((p) => p.gene.toUpperCase() === sym.toUpperCase());
+        if (hit) return hit;
       }
+    }
+
+    // Tier 4: loose contains-match on gene symbol. Last resort for cases
+    // like "PCSK9-targeted therapy" where the gene appears without a clean
+    // word boundary.
+    for (const p of all) {
+      if (normalized.includes(p.gene.toLowerCase())) return p;
     }
     return null;
   }

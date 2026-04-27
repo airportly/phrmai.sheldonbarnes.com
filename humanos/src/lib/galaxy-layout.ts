@@ -54,8 +54,8 @@ const DISEASES = (diseaseMetadata as { diseases: Record<string, DiseaseRecord> }
 // Scale in world units. 800 = ring radius for disease stars; protein orbits
 // span 35-220 around each star.
 const DISEASE_RING = 800;
-const ORBIT_MIN = 35;
-const ORBIT_MAX = 220;
+export const ORBIT_MIN = 35;
+export const ORBIT_MAX = 220;
 
 function strHash(s: string): number {
   let h = 2166136261;
@@ -67,7 +67,19 @@ function strHash(s: string): number {
 
 export function buildGalaxyLayout(): GalaxyLayout {
   const all = getAllEnrichedProteins();
-  const diseaseEntries = Object.entries(DISEASES);
+
+  // Pre-tally proteins per disease so we can drop disease stars that have
+  // nothing in orbit. An empty star on the ring reads as a hole in the data
+  // story and is misleading to demo viewers.
+  const proteinsByDiseaseLabel = new Map<string, number>();
+  for (const p of all) {
+    const lbl = (p.disease ?? '').toLowerCase();
+    proteinsByDiseaseLabel.set(lbl, (proteinsByDiseaseLabel.get(lbl) ?? 0) + 1);
+  }
+
+  const diseaseEntries = Object.entries(DISEASES).filter(
+    ([, d]) => (proteinsByDiseaseLabel.get(d.label.toLowerCase()) ?? 0) > 0,
+  );
 
   const diseases: DiseaseNode[] = diseaseEntries.map(([key, d], i) => {
     const angle = (i / diseaseEntries.length) * Math.PI * 2;

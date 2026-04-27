@@ -36,3 +36,10 @@ Thumbs.db
 # Misc
 .turbo/
 .cache/
+
+# TS incremental build info
+*.tsbuildinfo
+
+# Local-only discovery source artifacts (kept on disk, not tracked)
+/humanOS-discovery/
+/humanOS-discovery-artifacts/

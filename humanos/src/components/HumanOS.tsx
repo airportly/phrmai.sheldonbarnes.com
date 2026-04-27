@@ -50,6 +50,18 @@ export default function HumanOS() {
   const [isMobile, setIsMobile] = useState(false);
   const gridRef = React.useRef<HTMLDivElement>(null);
 
+  // Chrome toggles for app-wide UI elements that have no business living
+  // inside any single view's options panel. Open via the header gear.
+  const [chatVisible, setChatVisible] = useState(true);
+  const [complexityVisible, setComplexityVisible] = useState(true);
+  const [layoutOptionsOpen, setLayoutOptionsOpen] = useState(false);
+
+  // True while a /api/chat round-trip is in flight, plus the names of the
+  // tools the AI invoked on the most recent turn — handy for showing the
+  // user *what* it actually did instead of a generic "thinking…" stub.
+  const [aiThinking, setAiThinking] = useState(false);
+  const [lastTools, setLastTools] = useState<string[]>([]);
+
   // Default the side panels to hidden on mobile so the central view gets the
   // whole viewport. The toggle still works to bring them back per session.
   // Only forces the default on the first mobile-match per mount; the user can
@@ -219,6 +231,8 @@ export default function HumanOS() {
 
     const newHistory: ConversationTurn[] = [...conversation, { role: 'user', content: query }];
 
+    setAiThinking(true);
+    setLastTools([]);
     try {
       const response = await fetch(apiPath('/api/chat'), {
         method: 'POST',
@@ -228,6 +242,10 @@ export default function HumanOS() {
       if (!response.ok) throw new Error(`api ${response.status}`);
       const data = await response.json();
       const text: string = (data.text || '').trim() || localFallbackResponse(query, localProtein);
+      const tools: string[] = Array.isArray(data.toolCalls)
+        ? data.toolCalls.map((t: { name?: string }) => t?.name).filter((n: unknown): n is string => typeof n === 'string')
+        : [];
+      setLastTools(tools);
       setConversation([...newHistory, { role: 'assistant' as const, content: text }].slice(-HISTORY_CAP));
       setAiReachable(true);
       return text;
@@ -236,6 +254,8 @@ export default function HumanOS() {
       setConversation([...newHistory, { role: 'assistant' as const, content: text }].slice(-HISTORY_CAP));
       setAiReachable(false);
       return text;
+    } finally {
+      setAiThinking(false);
     }
   }, [conversation, handleOrganClick]);
 
@@ -252,7 +272,7 @@ export default function HumanOS() {
   }, []);
 
   return (
-    <div className="bg-[#070b20] rounded-2xl px-3 pt-4 pb-5 sm:px-7 sm:pt-6 sm:pb-7 relative overflow-hidden min-h-[640px] sm:min-h-[820px] max-w-[1480px] mx-auto"
+    <div className="bg-[#070b20] rounded-2xl px-3 pt-4 pb-5 sm:px-7 sm:pt-6 sm:pb-7 relative overflow-hidden min-h-[640px] sm:min-h-[820px] max-w-[1480px] xl:max-w-[1720px] 2xl:max-w-[2000px] min-[2000px]:max-w-none mx-auto"
          style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.4), inset 0 0 120px rgba(20,184,166,0.04)' }}>
       <BackgroundFX />
 
@@ -265,9 +285,17 @@ export default function HumanOS() {
           </div>
           <ScopeLine selectedOrgan={selectedOrgan} onClear={clearFilter} />
         </div>
-        <div className="flex items-center gap-2 flex-wrap md:flex-nowrap md:justify-end">
+        <div className="flex items-center gap-2 flex-wrap md:flex-nowrap md:justify-end relative">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
           <PanelsToggle value={panelsVisible} onChange={setPanelsVisible} />
+          <LayoutOptionsButton
+            open={layoutOptionsOpen}
+            onToggle={() => setLayoutOptionsOpen((o) => !o)}
+            chatVisible={chatVisible}
+            onChatChange={setChatVisible}
+            complexityVisible={complexityVisible}
+            onComplexityChange={setComplexityVisible}
+          />
           <ReasoningStatus reachable={aiReachable} />
           <DemoMode
             setSelectedOrgan={setSelectedOrgan}
@@ -287,6 +315,19 @@ export default function HumanOS() {
           )}
         </div>
       </header>
+
+      {chatVisible && (
+        <div className="relative z-10 mb-4">
+          <ChatPanel
+            onQuery={(q) => handleQuery(q, 'text')}
+            selectedProtein={selectedProtein}
+            selectedOrgan={selectedOrgan}
+            injected={injectedChat}
+            thinking={aiThinking}
+            lastTools={lastTools}
+          />
+        </div>
+      )}
 
       <div
         ref={gridRef}
@@ -359,18 +400,11 @@ export default function HumanOS() {
         )}
       </div>
 
-      <div className="relative z-10 mt-6">
-        <ComplexityMeter protein={selectedProtein} value={complexity} />
-      </div>
-
-      <div className="relative z-10 mt-5">
-        <ChatPanel
-          onQuery={(q) => handleQuery(q, 'text')}
-          selectedProtein={selectedProtein}
-          selectedOrgan={selectedOrgan}
-          injected={injectedChat}
-        />
-      </div>
+      {complexityVisible && (
+        <div className="relative z-10 mt-6">
+          <ComplexityMeter protein={selectedProtein} value={complexity} />
+        </div>
+      )}
 
       <DeepDiveOverlay
         cardTitle={expandedCard}
@@ -432,7 +466,7 @@ function ScopeLine({ selectedOrgan, onClear }: { selectedOrgan: OrganKey | null;
   if (!selectedOrgan) {
     return (
       <div className="text-[10px] tracking-[1.5px] text-white/30 mt-1">
-        13 diseases · 1,903 proteins · grounded in the cardiometabolic-research MCP
+        12 diseases · 1,903 proteins · grounded in the cardiometabolic-research MCP
       </div>
     );
   }
@@ -472,6 +506,78 @@ function ScopeLine({ selectedOrgan, onClear }: { selectedOrgan: OrganKey | null;
       >
         Clear
       </button>
+    </div>
+  );
+}
+
+function LayoutOptionsButton({
+  open,
+  onToggle,
+  chatVisible,
+  onChatChange,
+  complexityVisible,
+  onComplexityChange,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  chatVisible: boolean;
+  onChatChange: (v: boolean) => void;
+  complexityVisible: boolean;
+  onComplexityChange: (v: boolean) => void;
+}) {
+  const anyHidden = !chatVisible || !complexityVisible;
+  return (
+    <div className="relative">
+      <button
+        onClick={onToggle}
+        className="px-2.5 py-1.5 rounded-full text-[10px] tracking-[1.5px] uppercase transition flex items-center gap-1.5"
+        style={{
+          background: open || anyHidden ? 'rgba(127, 119, 221, 0.12)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${open || anyHidden ? 'rgba(127, 119, 221, 0.45)' : 'rgba(255,255,255,0.10)'}`,
+          color: open || anyHidden ? '#a3a1ed' : 'rgba(255,255,255,0.55)',
+        }}
+        title="Show / hide chat, complexity meter, and other layout chrome"
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+        Layout
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-2 rounded-lg p-3 z-30"
+          style={{
+            background: 'rgba(7, 11, 32, 0.94)',
+            border: '1px solid rgba(127, 119, 221, 0.45)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            minWidth: 220,
+          }}
+        >
+          <div className="text-[9.5px] tracking-[2px] uppercase text-cyan-300/70 mb-2">Layout options</div>
+          <div className="flex flex-col gap-1.5">
+            <label className="flex items-center justify-between gap-3 cursor-pointer text-[11px] text-white/75 hover:text-white">
+              <span>Chat panel</span>
+              <input
+                type="checkbox"
+                checked={chatVisible}
+                onChange={(e) => onChatChange(e.target.checked)}
+                className="accent-cyan-300 cursor-pointer"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 cursor-pointer text-[11px] text-white/75 hover:text-white">
+              <span>Context complexity</span>
+              <input
+                type="checkbox"
+                checked={complexityVisible}
+                onChange={(e) => onComplexityChange(e.target.checked)}
+                className="accent-cyan-300 cursor-pointer"
+              />
+            </label>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
